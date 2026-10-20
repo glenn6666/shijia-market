@@ -22,3 +22,16 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px;borde
 .st{padding:2px 8px;border-radius:99px;font-size:12px;color:#fff}
 @media(max-width:800px){.kpi .v{font-size:19px}aside{position:fixed;inset:0 auto 0 0;z-index:5;transform:translateX(-100%);transition:.2s;background:var(--bg)}aside.open{transform:none}#menu{display:inline-block}.kpis{grid-template-columns:1fr 1fr}main{padding:12px}.grid2{grid-template-columns:1fr}}
 [hidden]{display:none!important}
+.ymsel{margin-left:auto;font-size:14px;display:flex;gap:4px;align-items:center}.ymsel select{width:auto;padding:6px}
+.warn{background:#fff4dc;border:1px solid #f1d39a;color:#7a5410;border-radius:12px;padding:8px 12px;font-size:13px;margin-bottom:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.row>*{flex:0 1 auto}.row input,.row select{width:auto;min-width:120px}
+.form{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px 12px;margin-bottom:12px}.form label{font-size:12px;color:var(--mu);display:grid;gap:3px}
+.form input,.form select{padding:7px 9px;font-size:15px}.sm{padding:5px 10px;font-size:13px}.red{background:#c0392b}.tbl{overflow:auto;max-height:65vh}
+table input{width:84px;padding:4px 6px;font-size:14px}.loc{background:#fff8e6}thead th{position:sticky;top:0;background:var(--card);z-index:1}
+.fp{width:100%;height:auto;display:block;min-width:900px}.fp .t{cursor:pointer}.fp .t:hover rect{stroke:#000;stroke-width:2}.fp text{pointer-events:none;font-family:inherit}
+.chips{display:flex;flex-wrap:wrap;gap:4px}.chip{border:1px solid var(--line);border-radius:6px;padding:3px 6px;font-size:12px;cursor:pointer;background:#fff}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 16px;border-radius:10px;z-index:20}
+.pager{display:flex;gap:6px;align-items:center;margin-top:8px;font-size:13px}
+.legend span::before{border:1px solid #bbb}
+.row input[type=checkbox]{min-width:0;width:auto}.tbl td,.tbl th{white-space:nowrap}
+@media(max-width:800px){header{flex-wrap:wrap}header h1{font-size:19px}.ymsel{font-size:12px}}
