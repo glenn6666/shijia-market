@@ -5,7 +5,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const COL={paid:'#7cc68a',unpaid:'#ec8a86',part:'#f6bd72',over:'#86aee8',empty:'#d6d1c9',nodata:'#ffffff'},LBL={paid:'已繳清',unpaid:'未繳',part:'部分繳',over:'溢繳',empty:'空攤／無應收',nodata:'無資料'};
 const ZONE={a:['#e6eef7','#7d9cc0','A區攤位'],fe:['#e3f0e6','#7fae8b','F／E區攤位'],out:['#f5e6d3','#c8a57c','外圍／其他攤位'],pub:['#dcd8ea','#8f88b5','公共設施']};
 const LKEY='sjf_local_v2';
-let P,B,L,D,R,byId,KEY,Y=115,M=4,mapMode='pay';
+let KIDS={},P,B,L,D,R,byId,KEY,Y=115,M=4,mapMode='pay';
 const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0)),tob64=u=>{let s='';const a=new Uint8Array(u);for(let i=0;i<a.length;i+=8192)s+=String.fromCharCode.apply(null,a.subarray(i,i+8192));return btoa(s);};
 async function unlock(pw){const E=await (await fetch('data.enc.json',{cache:'no-store'})).json();
  const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
@@ -21,6 +21,8 @@ function toast(t){const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeou
 $('#gf').onsubmit=async e=>{e.preventDefault();$('#gerr').textContent='解密中…';try{P=await unlock($('#pw').value);sessionStorage.k=$('#pw').value;start();}catch(x){console.error(x);$('#gerr').textContent='密碼錯誤';}};
 if(sessionStorage.k){unlock(sessionStorage.k).then(p=>{P=p;start();}).catch(()=>sessionStorage.removeItem('k'));}
 $('#lock').onclick=()=>{sessionStorage.removeItem('k');location.reload();};
+// 子攤位：編號尾端為「-數字」（十甲3-、東光27-、東光4- 結尾沒有數字，視為獨立攤位原樣保留）
+function parentOf(id){const m=/^(.+)-\d+$/.exec(id);return m?m[1]:null;}
 function status(o){if(!o)return'nodata';if(o.due==null||o.due===0)return o.paid>0?'over':'empty';if(o.paid<=0)return'unpaid';if(o.bal===0)return'paid';return o.bal<0?'over':'part';}
 let page='ov';
 async function start(){B=P.data;L=await loadLocal();[Y,M]=B.ym;
@@ -29,6 +31,7 @@ async function start(){B=P.data;L=await loadLocal();[Y,M]=B.ym;
  $('#gate').hidden=true;$('#app').hidden=false;$$('nav a').forEach(a=>a.onclick=()=>go(a.dataset.p));$('#menu').onclick=()=>$('#side').classList.toggle('open');refresh();go('ov');}
 function refresh(){D=MarketCalc.merge(B,L);R=MarketCalc.compute(D,Y,M);byId={};const c=B.cust;
  R.forEach(o=>{byId[U(o.id)]=o;o.cust=c[U(o.id)+'|'+o.name];if(!o.tel&&o.cust)o.tel=o.cust.tel;});
+ KIDS={};R.forEach(o=>{const p=parentOf(o.id);if(p)(KIDS[U(p)]=KIDS[U(p)]||[]).push(o);});
  const n=cnt();$('#localbar').innerHTML=`⚠️ 新增／修改的資料<b>只存在這台裝置的這個瀏覽器</b>（已加密），換手機／電腦或清除瀏覽器資料就看不到。${n?`目前有 <b>${n}</b> 筆本機異動，請到「匯出／匯入」定期備份。`:'目前沒有本機異動。'}`;
  render(page);}
 const PAGES={ov,map,stall,pay,meter,jr,pl,ar,data};
@@ -51,20 +54,22 @@ function ov(){const s=sums(),pc=s.due?s.paid/s.due*100:0,un=R.filter(o=>o.bal).s
 function map(){const Lo=P.layout,leg=mapMode=='pay'?Object.keys(COL).map(k=>`<span style="--c:${COL[k]}">${LBL[k]}</span>`).join(''):Object.keys(ZONE).map(k=>`<span style="--c:${ZONE[k][0]}">${ZONE[k][2]}</span>`).join('');
  const tiles=Lo.tiles.map(t=>{const z=ZONE[t.z];if(!t.id){return `<g><rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" fill="${z[0]}" stroke="${z[1]}" stroke-width=".8"/>${t.label?txt(t.label,t,t.label=='中央大道'?0:1):''}</g>`;}
   const o=byId[U(t.id)],s=status(o),fill=mapMode=='pay'?COL[s]:z[0];
-  return `<g class="t" data-id="${esc(t.id)}"><rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" fill="${fill}" stroke="${z[1]}" stroke-width=".8"/>${txt(t.id,t)}<title>${esc(t.id)} ${esc(o?o.name:'無資料')}｜${LBL[s]}${o&&o.bal?'｜餘款 '+fmt(o.bal):''}</title></g>`;}).join('');
+  return `<g class="t" data-id="${esc(t.id)}"><rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}" fill="${fill}" stroke="${z[1]}" stroke-width=".8"/>${txt(t.id,t)}${(KIDS[U(t.id)]||[]).length?`<circle cx="${t.x+t.w-3.2}" cy="${t.y+3.2}" r="3.4" fill="#2f3a4a"/><text x="${t.x+t.w-3.2}" y="${t.y+4.6}" font-size="4" fill="#fff" text-anchor="middle">${KIDS[U(t.id)].length}</text>`:''}<title>${esc(t.id)} ${esc(o?o.name:'無資料')}｜${LBL[s]}${o&&o.bal?'｜餘款 '+fmt(o.bal):''}${(KIDS[U(t.id)]||[]).length?'｜子攤位 '+KIDS[U(t.id)].map(k=>k.id).join('、'):''}</title></g>`;}).join('');
  const labs=Lo.labels.map(l=>l.v?`<text x="${l.x}" y="${l.y}" font-size="${l.sz}" fill="#5b6470" text-anchor="middle" style="writing-mode:vertical-rl;letter-spacing:${l.sz>9?6:1}px">${esc(l.s)}</text>`:`<text x="${l.x}" y="${l.y}" font-size="${l.sz}" fill="#5b6470" text-anchor="middle" letter-spacing="${l.sz>9?4:0}">${esc(l.s)}</text>`).join('');
- const onmap=new Set(Lo.tiles.filter(t=>t.id).map(t=>U(t.id))),off=R.filter(o=>!onmap.has(U(o.id))),grp={};
- off.forEach(o=>{const g=/^\d停/.test(o.id)?'停車位':/^庫A/.test(o.id)?'庫A':/^庫/.test(o.id)?'庫':/^臨時/.test(o.id)?'臨時攤位':'其他（子攤位、C/D 區等）';(grp[g]=grp[g]||[]).push(o);});
+ const onmap=new Set(Lo.tiles.filter(t=>t.id).map(t=>U(t.id))),nod=Lo.tiles.filter(t=>t.id&&!byId[U(t.id)]).map(t=>t.id);
+ const off=R.filter(o=>!onmap.has(U(o.id))&&!(parentOf(o.id)&&onmap.has(U(parentOf(o.id))))),grp={},ORD=['停車位','臨時攤位','庫','庫A','子攤位（母攤不在圖上）','B／C／D 區','其他（圖上沒有位置）'];
+ off.forEach(o=>{const g=/^\d停/.test(o.id)?'停車位':/^庫A/.test(o.id)?'庫A':/^庫/.test(o.id)?'庫':/^臨時/.test(o.id)?'臨時攤位':parentOf(o.id)?'子攤位（母攤不在圖上）':/^[BCD]\d/.test(o.id)?'B／C／D 區':'其他（圖上沒有位置）';(grp[g]=grp[g]||[]).push(o);});
  $('#p-map').innerHTML=`<div class="row"><div class="tabs" style="margin:0"><button data-mm="pay" class="${mapMode=='pay'?'on':''}">繳費狀態</button><button data-mm="zone" class="${mapMode=='zone'?'on':''}">區域配色</button></div>
  <input id="mq" placeholder="搜尋攤號或租戶" style="max-width:240px"><span class="muted" style="font-size:13px">${ymTxt()}</span></div><div class="legend">${leg}</div>
  <div class="mapwrap card" style="padding:6px"><svg class="fp" viewBox="0 0 ${Lo.w} ${Lo.h}" xmlns="http://www.w3.org/2000/svg"><text x="512" y="22" font-size="15" text-anchor="middle" fill="#333">十甲發｜攤位整合平面圖</text><line x1="20" y1="58" x2="1004" y2="58" stroke="#2f3a4a" stroke-width="2"/>${tiles}${labs}</svg></div>
- <div class="card" style="margin-top:12px"><h3 style="margin-top:0">不在平面圖上的攤位（${off.length}）</h3>${Object.keys(grp).map(g=>`<p style="margin:8px 0 4px"><b>${g}</b>（${grp[g].length}）</p><div class="chips">${grp[g].map(o=>`<span class="chip" data-id="${esc(o.id)}" style="background:${COL[status(o)]}">${esc(o.id)}</span>`).join('')}</div>`).join('')}</div>`;
+ <div class="card" style="margin-top:12px"><h3 style="margin-top:0">不在平面圖上的攤位（${off.length}）</h3><p class="muted" style="font-size:12px">子攤位（如 L3-1、A101-1）若母攤在圖上，點母攤圖塊即可在資料卡切換；圖塊右上角的數字＝子攤位數。</p>${ORD.filter(g=>grp[g]).map(g=>`<p style="margin:8px 0 4px"><b>${g}</b>（${grp[g].length}）</p><div class="chips">${grp[g].map(o=>`<span class="chip" data-id="${esc(o.id)}" style="background:${COL[status(o)]}">${esc(o.id)}</span>`).join('')}</div>`).join('')}</div>
+ <div class="card" style="margin-top:12px"><h3 style="margin-top:0">圖上有、試算表沒有的攤位（${nod.length}，白色）</h3><div class="chips">${nod.map(i=>`<span class="chip" data-id="${esc(i)}">${esc(i)}</span>`).join('')}</div></div>`;
  $$('#p-map [data-mm]').forEach(b=>b.onclick=()=>{mapMode=b.dataset.mm;map();});$$('#p-map .t,#p-map .chip').forEach(c=>c.onclick=()=>card(c.dataset.id));
  $('#mq').oninput=e=>{const q=U(e.target.value.trim()).replace(/^A(\d{1,2})$/,(m,n)=>'A'+n.padStart(3,'0'));$$('#p-map .t').forEach(g=>{const o=byId[U(g.dataset.id)],hit=q&&(U(g.dataset.id)==q||(q.length>=2&&o&&U(o.name).includes(q)));g.querySelector('rect').setAttribute('stroke-width',hit?4:.8);g.querySelector('rect').setAttribute('stroke',hit?'#000':ZONE[P.layout.tiles.find(t=>t.id==g.dataset.id).z][1]);if(hit)g.scrollIntoView({block:'center',inline:'center',behavior:'smooth'});});};}
 function txt(s,t,big){const fs=Math.min(t.h*0.55,(t.w-2)/Math.max(String(s).length*0.62,1),big?12:9.5);return `<text x="${t.x+t.w/2}" y="${t.y+t.h/2+fs*0.36}" font-size="${fs.toFixed(1)}" text-anchor="middle" fill="#222">${esc(s)}</text>`;}
 // ── 攤位資料卡
-function card(id){const o=byId[U(id)];let h;
- if(!o){h=`<h2>${esc(id)}</h2><p class="muted">平面圖上有此攤號，但試算表「02攤位建檔資料庫」沒有這個攤位。</p><button id="newst">建立這個攤位</button>`;openM(h);$('#newst').onclick=()=>editStall(null,id);return;}
+function card(id){const o=byId[U(id)];let h;const par=parentOf(id)||id,fam=[par].concat((KIDS[U(par)]||[]).map(k=>k.id)),tabs=fam.length>1?`<div class="tabs" style="margin:0 30px 10px 0">${fam.map(f=>`<button class="sm ${U(f)==U(id)?'on':''}" data-fam="${esc(f)}">${esc(f)}${byId[U(f)]?' '+LBL[status(byId[U(f)])]:''}</button>`).join('')}</div>`:'';
+ if(!o){h=`<h2>${esc(id)}</h2><p class="muted">平面圖上有此攤號，但試算表「02攤位建檔資料庫」沒有這個攤位。</p><button id="newst">建立這個攤位</button>`;openM(tabs+h);bindFam();$('#newst').onclick=()=>editStall(null,id);return;}
  const s=status(o),r=o.rent,rd=o.read,q=(k,n)=>rd[k][0]||rd[k][1]?`<div><b>${n}</b>${rd[k][0]} → ${rd[k][1]}（${rd[k][2]} 度 × ${o.rate[k]}）</div>`:'';
  const hs=o.hist.slice().sort((a,b)=>(+b.y-+a.y)||(+b.m-+a.m)||String(b.d).localeCompare(a.d)).slice(0,24);
  h=`<h2 style="margin:0 30px 4px 0">${esc(o.id)} <span class="st" style="background:${COL[s]};color:#222">${LBL[s]}</span></h2><p class="muted" style="margin-top:0">${esc(o.name||'（無租客）')}${o.note?'・'+esc(o.note):''}・${ymTxt()}</p>
@@ -74,7 +79,8 @@ function card(id){const o=byId[U(id)];let h;
  <div class="kpis" style="grid-template-columns:repeat(3,1fr);margin:12px 0"><div class="card kpi">本月應收<div class="v" style="font-size:18px">${fmt(o.due)}</div></div><div class="card kpi">本月已收<div class="v" style="font-size:18px">${fmt(o.paid)}</div></div><div class="card kpi">本月餘款<div class="v" style="font-size:18px">${fmt(o.bal)}</div></div></div>
  <div class="row"><button id="c-pay">登記繳費／銷帳</button><button id="c-ed" class="ghost">編輯攤位</button></div>
  <h3>繳費紀錄（最近 ${hs.length} 筆／共 ${o.hist.length} 筆）</h3>${tbl(['銷帳年月','日期','姓名','實收','方式','經手人'],hs.map(p=>`<tr class="${p.k[0]=='L'?'loc':''}"><td>${esc(p.y)}/${esc(p.m)}</td><td>${esc(p.d)}</td><td>${esc(p.nm)}</td><td class="n">${fmt(p.amt||0)}</td><td>${esc(p.pay||'')}${p.bill?' #'+esc(p.bill):''}</td><td>${esc(p.who||'')}</td></tr>`))}`;
- openM(h);$('#c-pay').onclick=()=>payForm(o);$('#c-ed').onclick=()=>editStall(o);}
+ openM(tabs+h);bindFam();$('#c-pay').onclick=()=>payForm(o);$('#c-ed').onclick=()=>editStall(o);}
+function bindFam(){$$('#mbody [data-fam]').forEach(b=>b.onclick=()=>card(b.dataset.fam));}
 function openM(h){$('#mbody').innerHTML=h;$('#modal').hidden=false;}
 $('#mx').onclick=()=>$('#modal').hidden=true;$('#modal').onclick=e=>{if(e.target.id=='modal')$('#modal').hidden=true;};
 const F=(id,label,val,type,opts)=>`<label>${label}${opts?`<select id="${id}">${opts.map(x=>`<option ${x==val?'selected':''}>${esc(x)}</option>`).join('')}</select>`:`<input id="${id}" type="${type||'text'}" value="${esc(val??'')}" ${type=='number'?'step="any"':''}>`}</label>`;

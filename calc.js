@@ -14,11 +14,15 @@ function merge(B,L){L=L||{};const D=Object.assign({},B);
   const pd=new Set(L.payDel||[]);D.pays=B.pays.filter(p=>!pd.has(p.k)).concat((L.pay||[]).filter(p=>!pd.has(p.k)));
   const jd=new Set(L.jrDel||[]);D.jr=B.jr.filter(p=>!jd.has(p.k)).concat((L.jr||[]).filter(p=>!jd.has(p.k)));
   return D;}
-function latestRents(D){const R={};D.rents.forEach(r=>{const k=U(r[1]);if(!R[k]||r[0]>R[k].ym)R[k]={ym:r[0],name:r[2],type:r[3],day:r[4],mon:r[5],ice:r[6],park:r[7],clean:r[8]};});return R;}
+// 租金：取「年月範圍 ≤ 帳單年月」的最新一筆（當期租金）；若該攤沒有 ≤ 帳單年月的紀錄，退回原表「全期最新」。
+// 對最新一期（115/4）結果與原表 02 J–N 相同。
+function periodRents(D,ymk){const R={},F={};const mk=r=>({ym:r[0],name:r[2],type:r[3],day:r[4],mon:r[5],ice:r[6],park:r[7],clean:r[8]});
+  D.rents.forEach(r=>{const k=U(r[1]);if(!F[k]||r[0]>F[k].ym)F[k]=mk(r);if(r[0]<=ymk&&(!R[k]||r[0]>R[k].ym))R[k]=mk(r);});
+  Object.keys(F).forEach(k=>{if(!R[k])R[k]=F[k];});return R;}
 function meterMap(D,y,m){const M={};D.meters.forEach(r=>{if(r[1]==y&&r[2]==m){const k=U(r[0]),o=M[k]||(M[k]=[0,0,0,0,0,0,0,0]);for(let i=0;i<8;i++)o[i]+=+r[3+i]||0;}});return M;}
 function compute(D,y,m){y=y||D.ym[0];m=m||D.ym[1];
   const [my,mm]=prevYM(y,m),[py,pm]=prevYM(my,mm);// 水電本月=帳單上月，水電上月=帳單上上月；費率取水電本月
-  const A=meterMap(D,py,pm),Bm=meterMap(D,my,mm),RT=latestRents(D),Z=[0,0,0,0,0,0,0,0];
+  const A=meterMap(D,py,pm),Bm=meterMap(D,my,mm),RT=periodRents(D,y*100+m),Z=[0,0,0,0,0,0,0,0];
   const paid={},hist={},pk=y+'|'+m;
   D.pays.forEach(p=>{const st=U(p.st);(hist[st]=hist[st]||[]).push(p);if(String(p.y)+'|'+String(p.m)===pk){const k=st+'|'+U(p.nm);paid[k]=(paid[k]||0)+(+p.amt||0);}});
   return D.stalls.map(s=>{const id=U(s.id),r=RT[id]||{day:0,mon:0,ice:0,park:0,clean:0},a=A[id]||Z,b=Bm[id]||Z;
