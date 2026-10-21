@@ -34,7 +34,7 @@ function refresh(){D=MarketCalc.merge(B,L);R=MarketCalc.compute(D,Y,M);byId={};c
  KIDS={};R.forEach(o=>{const p=parentOf(o.id);if(p)(KIDS[U(p)]=KIDS[U(p)]||[]).push(o);});
  const n=cnt();$('#localbar').innerHTML=`⚠️ 新增／修改的資料<b>只存在這台裝置的這個瀏覽器</b>（已加密），換手機／電腦或清除瀏覽器資料就看不到。${n?`目前有 <b>${n}</b> 筆本機異動，請到「匯出／匯入」定期備份。`:'目前沒有本機異動。'}`;
  render(page);}
-const PAGES={ov,map,stall,pay,meter,jr,pl,ar,data};
+const PAGES={ov,map,stall,pay,meter,jr,pl,ar,data,prt:()=>SJFPrint.render({D,R,Y,M,el:$('#p-prt')})};
 function go(p){page=p;$$('nav a').forEach(a=>a.classList.toggle('on',a.dataset.p==p));$$('main section').forEach(s=>s.hidden=s.id!='p-'+p);
  $('#ttl').textContent=$('nav a[data-p='+p+']').textContent.slice(2).trim();$('#side').classList.remove('open');render(p);}
 function render(p){PAGES[p]();}
