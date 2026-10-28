@@ -13,9 +13,19 @@ async function unlock(pw){const E=await (await fetch('data.enc.json',{cache:'no-
  const raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(E.iv)},key,b64(E.ct));KEY=key;
  return JSON.parse(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('gzip'))).text());}
 // 本機異動：以同一把金鑰加密後存 localStorage
-async function loadLocal(){const s=localStorage.getItem(LKEY);if(!s)return {};try{const o=JSON.parse(s);const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(o.iv)},KEY,b64(o.ct));return JSON.parse(new TextDecoder().decode(pt));}catch(e){toast('本機異動無法解密（可能密碼不同），已略過');return {};}}
-async function saveLocal(){const iv=crypto.getRandomValues(new Uint8Array(12));const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},KEY,new TextEncoder().encode(JSON.stringify(L)));
- try{localStorage.setItem(LKEY,JSON.stringify({iv:tob64(iv),ct:tob64(ct),t:Date.now()}));}catch(e){alert('瀏覽器儲存空間不足，請先匯出備份');}refresh();}
+let SNAP=null,SE=null,SK=null,LOCALT=0;const SURL='sjf_sync_url',S=window.SJFSync;
+const syncUrl=()=>(localStorage.getItem(SURL)||'').trim();
+const devId=()=>localStorage.sjf_dev||(localStorage.sjf_dev=(navigator.platform||'dev').slice(0,12)+'-'+Math.random().toString(36).slice(2,8));
+const SLBL={off:['⚪','未設定雲端同步'],busy:['🔄','同步中…'],pending:['🕒','等待同步…'],ok:['🟢','已同步'],offline:['🟠','離線，資料先存在這台，連線後自動同步'],err:['🔴','同步失敗']};
+function syncStatus(st,msg){const e=$('#sync');if(!e)return;const[i,t]=SLBL[st]||SLBL.err;e.textContent=i+' '+t+(st=='ok'?' '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}):'');e.title=msg||'';e.dataset.st=st;}
+async function writeLocal(){const iv=crypto.getRandomValues(new Uint8Array(12));const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},KEY,new TextEncoder().encode(JSON.stringify(L)));
+ try{localStorage.setItem(LKEY,JSON.stringify({iv:tob64(iv),ct:tob64(ct),t:Date.now()}));}catch(e){alert('瀏覽器儲存空間不足，請先匯出備份');}}
+async function initSync(pw){L=S.stamp(L,null,Date.now(),LOCALT||Date.now());SNAP=S.snap(L);SK=await S.keys(pw);
+ SE=S.Engine({url:syncUrl,token:SK.token,key:SK.key,device:devId(),getL:()=>L,setL:async M=>{L=M;SNAP=S.snap(L);await writeLocal();refresh();toast('已從雲端合併其他裝置的異動');},setBase:t=>localStorage.sjf_sync_base=t,status:syncStatus});
+ syncStatus(syncUrl()?'pending':'off');SE.run();
+ setInterval(()=>{if(!document.hidden)SE.run();},60000);addEventListener('online',()=>SE.run());document.addEventListener('visibilitychange',()=>{if(!document.hidden)SE.run();});}
+async function loadLocal(){const s=localStorage.getItem(LKEY);if(!s)return {};try{const o=JSON.parse(s);LOCALT=o.t||0;const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(o.iv)},KEY,b64(o.ct));return JSON.parse(new TextDecoder().decode(pt));}catch(e){toast('本機異動無法解密（可能密碼不同），已略過');return {};}}
+async function saveLocal(){L=S.stamp(L,SNAP,Date.now());SNAP=S.snap(L);await writeLocal();refresh();if(SE)SE.soon();}
 function cnt(){return (L.pay||[]).length+(L.payDel||[]).length+(L.meter||[]).length+(L.jr||[]).length+(L.jrDel||[]).length+(L.rent||[]).length+Object.keys(L.stall||{}).length+(L.stallNew||[]).length;}
 function toast(t){const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(e._t);e._t=setTimeout(()=>e.hidden=true,2500);}
 $('#gf').onsubmit=async e=>{e.preventDefault();$('#gerr').textContent='解密中…';try{P=await unlock($('#pw').value);sessionStorage.k=$('#pw').value;start();}catch(x){console.error(x);$('#gerr').textContent='密碼錯誤';}};
@@ -25,16 +35,16 @@ $('#lock').onclick=()=>{sessionStorage.removeItem('k');location.reload();};
 function parentOf(id){const m=/^(.+)-\d+$/.exec(id);return m?m[1]:null;}
 function status(o){if(!o)return'nodata';if(o.due==null||o.due===0)return o.paid>0?'over':'empty';if(o.paid<=0)return'unpaid';if(o.bal===0)return'paid';return o.bal<0?'over':'part';}
 let page='ov';
-async function start(){B=P.data;L=await loadLocal();[Y,M]=B.ym;
+async function start(){B=P.data;L=await loadLocal();await initSync(sessionStorage.k);[Y,M]=B.ym;
  $('#yy').innerHTML=Array.from({length:20},(_,i)=>`<option>${111+i}</option>`).join('');$('#mm').innerHTML=Array.from({length:12},(_,i)=>`<option>${i+1}</option>`).join('');
  $('#yy').value=Y;$('#mm').value=M;$('#yy').onchange=$('#mm').onchange=()=>{Y=+$('#yy').value;M=+$('#mm').value;refresh();};
  $('#gate').hidden=true;$('#app').hidden=false;$$('nav a').forEach(a=>a.onclick=()=>go(a.dataset.p));$('#menu').onclick=()=>$('#side').classList.toggle('open');refresh();go('ov');}
 function refresh(){D=MarketCalc.merge(B,L);R=MarketCalc.compute(D,Y,M);byId={};const c=B.cust;
  R.forEach(o=>{byId[U(o.id)]=o;o.cust=c[U(o.id)+'|'+o.name];if(!o.tel&&o.cust)o.tel=o.cust.tel;});
  KIDS={};R.forEach(o=>{const p=parentOf(o.id);if(p)(KIDS[U(p)]=KIDS[U(p)]||[]).push(o);});
- const n=cnt();$('#localbar').innerHTML=`⚠️ 新增／修改的資料<b>只存在這台裝置的這個瀏覽器</b>（已加密），換手機／電腦或清除瀏覽器資料就看不到。${n?`目前有 <b>${n}</b> 筆本機異動，請到「匯出／匯入」定期備份。`:'目前沒有本機異動。'}`;
+ const n=cnt();if(syncUrl()){$('#localbar').innerHTML=`☁️ 已開啟雲端同步：新增／修改會自動存到 Google 試算表（加密），其他裝置登入後會自動合併。目前共 <b>${n}</b> 筆異動。`;}else $('#localbar').innerHTML=`⚠️ 新增／修改的資料<b>只存在這台裝置的這個瀏覽器</b>（已加密），換手機／電腦或清除瀏覽器資料就看不到。${n?`目前有 <b>${n}</b> 筆本機異動，請到「匯出／匯入」定期備份。`:'目前沒有本機異動。'}`;
  render(page);}
-const PAGES={ov,map,stall,pay,meter,jr,pl,ar,data,prt:()=>SJFPrint.render({D,R,Y,M,el:$('#p-prt')})};
+const PAGES={ov,map,stall,pay,meter,jr,pl,ar,data,close:()=>SJFClose.render({D,Y,M,el:$('#p-close')}),prt:()=>SJFPrint.render({D,R,Y,M,el:$('#p-prt')})};
 function go(p){page=p;$$('nav a').forEach(a=>a.classList.toggle('on',a.dataset.p==p));$$('main section').forEach(s=>s.hidden=s.id!='p-'+p);
  $('#ttl').textContent=$('nav a[data-p='+p+']').textContent.slice(2).trim();$('#side').classList.remove('open');render(p);}
 function render(p){PAGES[p]();}
@@ -118,7 +128,7 @@ function payForm(o,amt){const today=new Date().toISOString().slice(0,10);
  $('#p-st').setAttribute('list','stl');const hint=()=>{const x=byId[U(V('p-st'))];if(x){if(!V('p-nm')||document.activeElement.id=='p-st')$('#p-nm').value=x.name;$('#p-hint').textContent=`${ymTxt()} 應收 ${fmt(x.due)}，已收 ${fmt(x.paid)}，餘款 ${fmt(x.bal)}`;}else $('#p-hint').textContent='查無此攤位';};$('#p-st').oninput=hint;hint();
  $('#p-save').onclick=async()=>{if(!byId[U(V('p-st'))])return alert('查無此攤位');if(V('p-amt')==='')return alert('請填金額');
   const p={k:'L'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),st:V('p-st'),nm:V('p-nm'),y:String(+V('p-y')),m:String(+V('p-m')),d:V('p-d').replace(/-/g,'/'),item:V('p-item'),amt:+V('p-amt'),pay:V('p-paym'),bill:V('p-bill'),bdue:V('p-bdue').replace(/-/g,'/'),inv:V('p-inv'),who:V('p-who'),memo:V('p-memo'),local:1};
-  (L.pay=L.pay||[]).push(p);$('#modal').hidden=true;await saveLocal();toast('已登記（只存在這台裝置）');};}
+  (L.pay=L.pay||[]).push(p);$('#modal').hidden=true;await saveLocal();toast(syncUrl()?'已登記':'已登記（只存在這台裝置）');};}
 function pay(){const key=Y+'|'+M;let rows=D.pays.filter(p=>(pyAll||String(p.y)+'|'+String(p.m)==key)&&(!pyQ||U(p.st+p.nm).includes(U(pyQ))));rows=rows.slice().reverse();
  const tot=rows.reduce((a,p)=>a+(+p.amt||0),0),PG=200,pages=Math.ceil(rows.length/PG)||1;if(pyPg>=pages)pyPg=0;
  $('#p-pay').innerHTML=`<div class="card"><div class="row"><button id="py-new">＋ 新增繳費</button><input id="pyq" placeholder="攤位／姓名" value="${esc(pyQ)}"><label class="muted"><input type="checkbox" id="pyall" style="width:auto" ${pyAll?'checked':''}> 顯示全部月份</label><button class="ghost" id="pycsv">匯出 CSV</button></div>
@@ -148,7 +158,7 @@ function meter(){const [my,mm]=MarketCalc.prevYM(Y,M),[py,pm]=MarketCalc.prevYM(
  $('#mtq').onchange=e=>{mtQ=e.target.value;meter();};$('#mtonly').onchange=e=>{mtOnly=e.target.checked;meter();};$('#mtcsv').onclick=()=>csv('水電錶登記',meterSheet());
  $$('#p-meter tr[data-id]').forEach(tr=>{const id=tr.dataset.id,p=prev[U(id)]||[];tr.oninput=()=>{[3,5,7,9].forEach(i=>tr.querySelector('.d'+i).textContent=MarketCalc.delta(+p[i]||0,+tr.querySelector(`[data-i="${i}"]`).value||0));};
   tr.querySelector('[data-sv]').onclick=async()=>{const c=cur[U(id)];const row=[id,my,mm];for(let i=3;i<=10;i++)row.push(+tr.querySelector(`[data-i="${i}"]`).value||0);row.push(c?c[11]:'');
-   L.meter=(L.meter||[]).filter(r=>!(U(r[0])==U(id)&&r[1]==my&&r[2]==mm));L.meter.push(row);await saveLocal();toast(id+' 讀數已存（只存在這台裝置）');};});}
+   L.meter=(L.meter||[]).filter(r=>!(U(r[0])==U(id)&&r[1]==my&&r[2]==mm));L.meter.push(row);await saveLocal();toast(id+(syncUrl()?' 讀數已存':' 讀數已存（只存在這台裝置）'));};});}
 // ── 日帳流水帳
 function jrYM(){return (Y+1911)+'年'+String(M).padStart(2,'0')+'月';}
 function jr(){const J=MarketCalc.journal(D).filter(j=>j.ym==jrYM());const sum=k=>J.filter(j=>j.pl==k).reduce((a,j)=>a+j.signed,0);const cats=Object.keys(B.lk.cat).filter(c=>c!='流水帳類別');
@@ -157,7 +167,7 @@ function jr(){const J=MarketCalc.journal(D).filter(j=>j.ym==jrYM());const sum=k=
  ${tbl(['日期','流水序號','類別','損益項目','明細項目','金額','經手人','備註','金額計算',''],J.map(j=>`<tr class="${j.local?'loc':''}"><td>${esc(j.date)}</td><td>${esc(j.seq??'')}</td><td>${esc(j.cat)}</td><td>${esc(j.pl)}</td><td>${esc(j.item)}</td><td class="n">${num(j.amt)}</td><td>${esc(j.who)}</td><td>${esc(j.memo)}</td><td class="n">${num(j.signed)}</td><td><button class="sm ghost" data-jd="${j.k}">刪除</button></td></tr>`))}</div>`;
  $('#jcsv').onclick=()=>csv('日帳流水帳_'+jrYM(),jrSheet(J));
  $('#j-add').onclick=async()=>{if(!V('j-amt')||!V('j-item'))return alert('請填明細與金額');const seq=Math.max(0,...D.jr.map(j=>+j.seq||0))+1;
-  (L.jr=L.jr||[]).push({k:'L'+Date.now().toString(36),date:V('j-date').replace(/-/g,''),seq,cat:V('j-cat'),item:V('j-item'),amt:Math.abs(+V('j-amt')),who:V('j-who'),memo:V('j-memo'),j:V('j-j'),local:1});await saveLocal();toast('已新增（只存在這台裝置）');};
+  (L.jr=L.jr||[]).push({k:'L'+Date.now().toString(36),date:V('j-date').replace(/-/g,''),seq,cat:V('j-cat'),item:V('j-item'),amt:Math.abs(+V('j-amt')),who:V('j-who'),memo:V('j-memo'),j:V('j-j'),local:1});await saveLocal();toast(syncUrl()?'已新增':'已新增（只存在這台裝置）');};
  $$('#p-jr [data-jd]').forEach(b=>b.onclick=async()=>{const k=b.dataset.jd;if(!confirm('刪除這筆？'+(k[0]=='L'?'':'（原表紀錄只會在這台裝置隱藏）')))return;if(k[0]=='L')L.jr=L.jr.filter(j=>j.k!=k);else (L.jrDel=L.jrDel||[]).push(k);await saveLocal();});}
 // ── 損益
 function pl(){const p=MarketCalc.pnl(D,Y,M);
@@ -186,11 +196,15 @@ function xls(){const sh=[['攤位建檔_'+Y+'年'+M+'月',stallSheet()],['繳費
 function data(){const n=cnt();
  $('#p-data').innerHTML=`<div class="card"><h3 style="margin-top:0">匯出</h3><div class="row"><button id="x-xls">匯出 Excel（全部工作表）</button><button class="ghost" id="x-st">攤位建檔 CSV</button><button class="ghost" id="x-py">繳費登記 CSV</button><button class="ghost" id="x-mt">水電錶 CSV</button><button class="ghost" id="x-jr">流水帳 CSV</button></div>
  <p class="muted" style="font-size:12px">Excel 檔為 XML 試算表格式（.xls），Excel 開啟時若跳出格式提醒按「是」即可。內容含原試算表資料＋本機異動，<b>含租戶個資，請妥善保管</b>。</p></div>
+ <div class="card" style="margin-top:12px"><h3 style="margin-top:0">☁️ 雲端同步（Google 試算表）</h3><div class="row"><input id="s-url" style="flex:1;min-width:260px" placeholder="貼上 Apps Script 網址 https://script.google.com/macros/s/…/exec" value="${esc(syncUrl())}"><button id="s-save">儲存並同步</button><button class="ghost" id="s-now">立即同步</button></div>
+ <p class="muted" style="font-size:12px">每台裝置都要貼一次同一個網址。資料先在瀏覽器用登入密碼加密才上傳，試算表裡只看得到亂碼。沒網路時照常使用，連上網後會自動同步；同一筆在兩台都改過時，以<b>最後修改</b>的為準。設定方法見《設定說明》。</p></div>
  <div class="card" style="margin-top:12px"><h3 style="margin-top:0">本機異動備份（${n} 筆）</h3><div class="row"><button id="b-exp">匯出備份檔 (.json)</button><label class="ghost" style="border:1px solid var(--line);padding:9px 14px;border-radius:10px;cursor:pointer">匯入備份檔<input type="file" id="b-imp" accept=".json" hidden></label><button class="red" id="b-clr">清除這台裝置的本機異動</button></div>
  <p class="muted" style="font-size:12px">新增／修改只存在這台裝置的瀏覽器（localStorage，已用登入密碼加密）。要換裝置或備份，請匯出備份檔，到另一台登入後匯入。匯入會<b>取代</b>目前裝置上的本機異動。備份檔本身未加密，含個資，請勿外流。</p>
  ${tbl(['類別','筆數'],[['繳費新增',(L.pay||[]).length],['繳費隱藏',(L.payDel||[]).length],['水電讀數',(L.meter||[]).length],['流水帳新增',(L.jr||[]).length],['流水帳隱藏',(L.jrDel||[]).length],['攤位修改',Object.keys(L.stall||{}).length],['攤位新增',(L.stallNew||[]).length],['租金變更',(L.rent||[]).length]].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`))}</div>`;
  $('#x-xls').onclick=xls;$('#x-st').onclick=()=>csv('攤位建檔_'+Y+'_'+M,stallSheet());$('#x-py').onclick=()=>csv('繳費登記',paySheet(D.pays));$('#x-mt').onclick=()=>csv('水電錶登記',meterSheet());$('#x-jr').onclick=()=>csv('日帳流水帳',jrSheet(MarketCalc.journal(D)));
  $('#b-exp').onclick=()=>dl('十甲發_本機異動備份_'+new Date().toISOString().slice(0,10)+'.json',new Blob([JSON.stringify({app:'sjf',v:2,at:new Date().toISOString(),L},null,1)],{type:'application/json'}));
  $('#b-imp').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const o=JSON.parse(await f.text());if(o.app!='sjf'||!o.L)throw 0;if(!confirm('匯入會取代這台裝置目前的本機異動，確定？'))return;L=o.L;await saveLocal();toast('已匯入');}catch(x){alert('不是有效的備份檔');}};
- $('#b-clr').onclick=async()=>{if(!confirm('確定清除這台裝置所有本機異動？（建議先匯出備份）'))return;L={};localStorage.removeItem(LKEY);refresh();toast('已清除');};}
+ $('#b-clr').onclick=async()=>{if(!confirm(syncUrl()?'確定清除所有異動？已開啟雲端同步，其他裝置的這些異動也會一起被刪除。（建議先匯出備份）':'確定清除這台裝置所有本機異動？（建議先匯出備份）'))return;L={};await saveLocal();toast('已清除');};
+ $('#s-save').onclick=()=>{const u=$('#s-url').value.trim();if(u&&!/^https:\/\/script\.google(usercontent)?\.com\//.test(u))return alert('網址要是 https://script.google.com/macros/s/…/exec');if(u)localStorage.setItem(SURL,u);else localStorage.removeItem(SURL);syncStatus(u?'pending':'off');refresh();if(u)SE.run().then(()=>toast($('#sync').dataset.st=='ok'?'雲端同步成功':'同步失敗：'+$('#sync').title));};
+ $('#s-now').onclick=()=>SE.run();}
 })();
