@@ -50,19 +50,19 @@ function pageHtml(fmt,D,o,Y,M,adj){const t=T[fmt],v=values(D,o,Y,M,fmt);
   if(fmt=='tri')return `<div class="pg tri"><div class="pa" style="left:${5+adj.x}mm;top:${5+adj.y}mm;width:${t.w}mm;height:${t.h}mm">${body}</div></div>`;
   return `<div class="pg a4"><div class="pa" style="left:${28+adj.x}mm;top:${5+adj.y}mm;width:${t.w}mm;height:${t.h}mm;transform:scale(.8);transform-origin:0 0">${body}</div></div>`;}
 const CSS=`.pg{position:relative;overflow:hidden;background:#fff;color:#000;box-sizing:border-box}
-.pg.tri{width:240mm;height:140mm}.pg.a4{width:210mm;height:297mm}
+.pg.tri{width:240mm;height:140mm}.sheet.tri2{width:240mm;height:280mm;overflow:hidden;background:#fff}.sheet.tri2>.pg{display:block}.pg.a4{width:210mm;height:297mm}
 .pg .pa{position:absolute}
 .pg .pc{position:absolute;display:flex;white-space:nowrap;overflow:visible;box-sizing:border-box;padding:0 0.6mm;line-height:1.15;
  font-family:"Microsoft JhengHei Light","微軟正黑體 Light","Microsoft JhengHei","微軟正黑體","Noto Sans CJK TC","Noto Sans TC",sans-serif;font-weight:300}
 .pg .pc span{display:block}
 #prtroot{display:none}
-@media print{body>*:not(#prtroot){display:none!important}#prtroot{display:block!important}#prtroot .pg{page-break-after:always;break-after:page}#prtroot .pg:last-child{page-break-after:auto;break-after:auto}
+@media print{body>*:not(#prtroot){display:none!important}#prtroot{display:block!important}#prtroot>.sheet{page-break-after:always;break-after:page}#prtroot>.sheet:last-child{page-break-after:auto;break-after:auto}
  html,body{margin:0!important;padding:0!important;background:#fff!important}}`;
 function ensureCss(){if(!document.getElementById('prtcss')){const s=document.createElement('style');s.id='prtcss';s.textContent=CSS;document.head.appendChild(s);}}
-function setPage(fmt){let s=document.getElementById('prtpage');if(!s){s=document.createElement('style');s.id='prtpage';document.head.appendChild(s);}
-  s.textContent=fmt=='tri'?'@page{size:240mm 140mm;margin:0}':'@page{size:A4 portrait;margin:0}';}
+function setPage(fmt,up){let s=document.getElementById('prtpage');if(!s){s=document.createElement('style');s.id='prtpage';document.head.appendChild(s);}
+  s.textContent=fmt=='tri'?(up==1?'@page{size:240mm 140mm;margin:0}':'@page{size:240mm 280mm;margin:0}'):'@page{size:A4 portrait;margin:0}';}
 const LS=typeof localStorage!=='undefined'?localStorage:{};
-const ST={fmt:LS.sjfPrtFmt||'tri',q:'',sel:null,ym:'',adj:JSON.parse(LS.sjfPrtAdj||'{"tri":{"x":0,"y":0},"a4":{"x":0,"y":0}}')};
+const ST={fmt:LS.sjfPrtFmt||'tri',up:LS.sjfPrtUp=='1'?1:2,q:'',sel:null,ym:'',adj:JSON.parse(LS.sjfPrtAdj||'{"tri":{"x":0,"y":0},"a4":{"x":0,"y":0}}')};
 // 頁面
 function render(ctx){ensureCss();const {D,R,Y,M,el}=ctx;const key=Y+'/'+M;
   if(ST.ym!==key||!ST.sel){ST.ym=key;ST.sel=new Set(R.filter(o=>o.name&&o.ar).map(o=>U(o.id)));}
@@ -76,6 +76,7 @@ function render(ctx){ensureCss();const {D,R,Y,M,el}=ctx;const key=Y+'/'+M;
    <div class="row" style="flex-wrap:wrap;gap:8px"><input id="prq" placeholder="搜尋攤號／姓名" value="${esc(ST.q)}" style="max-width:200px">
     <button class="ghost sm" id="pr-ar">只勾有應收</button><button class="ghost sm" id="pr-all">全選</button><button class="ghost sm" id="pr-none">全不選</button>
     <span>位置微調 左右 <input id="pr-x" type="number" step="0.5" value="${adj.x}" style="width:70px"> 上下 <input id="pr-y" type="number" step="0.5" value="${adj.y}" style="width:70px"> mm</span>
+    ${ST.fmt=='tri'?`<select id="pr-up" style="width:auto"><option value="2" ${ST.up==2?'selected':''}>每頁 2 聯 (240×280)</option><option value="1" ${ST.up==1?'selected':''}>每頁 1 聯 (240×140 直式送印)</option></select>`:''}
     <button id="pr-go">🖨️ 列印已勾選（<b id="pr-n">${ST.sel.size}</b> 攤）</button></div>
    <div class="prlist" style="max-height:240px;overflow:auto;margin-top:8px;columns:200px">${shown.map(o=>`<label style="display:block;break-inside:avoid"><input type="checkbox" style="width:auto;display:inline-block;margin:0 4px 0 0;vertical-align:middle" data-s="${esc(o.id)}" ${ST.sel.has(U(o.id))?'checked':''}> ${esc(o.id)} ${esc(o.name||'')} <span class="muted">${o.due!=null?Number(o.due).toLocaleString():''}</span></label>`).join('')}</div></div>
    <div class="card"><b>預覽</b> <span class="muted">（第一個勾選的攤位；實際列印每攤一頁）</span><div id="pr-pv" style="overflow:auto;margin-top:8px"></div></div>`;
@@ -91,9 +92,14 @@ function render(ctx){ensureCss();const {D,R,Y,M,el}=ctx;const key=Y+'/'+M;
   $('#pr-all').onclick=()=>{shown.forEach(o=>ST.sel.add(U(o.id)));render(ctx);};
   $('#pr-none').onclick=()=>{ST.sel=new Set();render(ctx);};
   const sv=()=>{ST.adj[ST.fmt]={x:+$('#pr-x').value||0,y:+$('#pr-y').value||0};localStorage.sjfPrtAdj=JSON.stringify(ST.adj);pv();};$('#pr-x').onchange=$('#pr-y').onchange=sv;
-  $('#pr-go').onclick=()=>{const L=R.filter(o=>ST.sel.has(U(o.id)));if(!L.length)return alert('請先勾選攤位');printPages(ST.fmt,D,L,Y,M,ST.adj[ST.fmt]);};
+  if($('#pr-up'))$('#pr-up').onchange=e=>{ST.up=+e.target.value;localStorage.sjfPrtUp=String(ST.up);};
+  $('#pr-go').onclick=()=>{const L=R.filter(o=>ST.sel.has(U(o.id)));if(!L.length)return alert('請先勾選攤位');printPages(ST.fmt,D,L,Y,M,ST.adj[ST.fmt],ST.up);};
   pv();}
-function printPages(fmt,D,L,Y,M,adj){ensureCss();setPage(fmt);let r=document.getElementById('prtroot');if(!r){r=document.createElement('div');r.id='prtroot';document.body.appendChild(r);}
-  r.innerHTML=L.map(o=>pageHtml(fmt,D,o,Y,M,adj||{x:0,y:0})).join('');setTimeout(()=>window.print(),50);}
-g.SJFPrint={render,values,pageHtml,printPages,CSS,T};
+function printPages(fmt,D,L,Y,M,adj,up){up=up==1?1:2;ensureCss();setPage(fmt,up);let r=document.getElementById('prtroot');if(!r){r=document.createElement('div');r.id='prtroot';document.body.appendChild(r);}
+  r.innerHTML=sheets(fmt,D,L,Y,M,adj||{x:0,y:0},up);setTimeout(()=>window.print(),50);}
+// 三聯單每頁 2 聯：上聯 y=0、下聯 y=+140mm；單數時最後下半空白
+function sheets(fmt,D,L,Y,M,adj,up){const P=L.map(o=>pageHtml(fmt,D,o,Y,M,adj));
+  if(fmt!='tri'||up==1)return P.map(h=>`<div class="sheet">${h}</div>`).join('');
+  let out='';for(let i=0;i<P.length;i+=2)out+=`<div class="sheet tri2">${P[i]}${P[i+1]||'<div class="pg tri"></div>'}</div>`;return out;}
+g.SJFPrint={render,values,pageHtml,printPages,sheets,CSS,T};
 })(typeof window!=='undefined'?window:globalThis);
