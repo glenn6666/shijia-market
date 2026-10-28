@@ -41,5 +41,33 @@ function pnl(D,y,m){const R=compute(D,y,m).filter(o=>o.ar);const S=k=>R.reduce((
   inc.合計=Object.values(inc).reduce((a,b)=>a+b,0);const ym=(y+1911)+'年'+String(m).padStart(2,'0')+'月';
   const J=journal(D).filter(j=>j.ym===ym);const exp=J.filter(j=>j.pl==='營業支出').reduce((a,j)=>a+j.signed,0),oth=J.filter(j=>j.pl==='營業收入').reduce((a,j)=>a+j.signed,0);
   return {inc:inc,exp:exp,oth:oth,total:inc.合計+exp+oth,jr:J,ym:ym};}
-g.MarketCalc={compute,merge,journal,pnl,xround,delta,prevYM};
+// 水電錶歷史與異常：每個讀數月份一列；上月＝前一個日曆月讀數（缺月時帳單會當 0）
+const MK=[['e1','電錶1',0],['e2','電錶2',2],['w1','水錶1',4],['w2','水錶2',6]];
+function med(a){a=a.filter(x=>x>0).sort((x,y)=>x-y);if(!a.length)return 0;const h=a.length>>1;return a.length%2?a[h]:(a[h-1]+a[h])/2;}
+function allYM(D){const s=new Set();D.meters.forEach(r=>s.add(r[1]*100+ +r[2]));return [...s].sort((a,b)=>a-b);}
+function meterHist(D,id,yms){const k=U(id);yms=yms||allYM(D);const by={},cnt={};
+  D.meters.forEach(r=>{if(U(r[0])!==k)return;const ym=r[1]*100+ +r[2];cnt[ym]=(cnt[ym]||0)+1;const o=by[ym]||(by[ym]=[0,0,0,0,0,0,0,0,r[11]||'']);for(let i=0;i<8;i++)o[i]+=+r[3+i]||0;});
+  const have=yms.filter(y=>by[y]);if(!have.length)return {rows:[],meters:[]};
+  const used=MK.filter(m=>have.some(y=>by[y][m[2]]));
+  const rentRec=D.rents.filter(r=>U(r[1])===k);
+  const billed=ym=>{const [y,m]=[Math.floor(ym/100),ym%100],b=m==12?(y+1)*100+1:ym+1;let best=null;rentRec.forEach(r=>{if(r[0]<=b&&(!best||r[0]>best[0]))best=r;});return !!best&&[4,5,6,7,8].some(i=>+best[i]>0);};
+  const first=have[0],last=have[have.length-1],rows=[];let lastRead={};
+  yms.filter(y=>y>=first&&y<=last).forEach((ym,i,arr)=>{const cur=by[ym],pv=i?by[arr[i-1]]:null,row={ym,y:Math.floor(ym/100),m:ym%100,miss:!cur,note:cur?cur[8]:'',dup:(cnt[ym]||0)>1,v:{},flags:[]};
+    if(!cur){row.flags.push(['缺月','這個月份沒有任何水電讀數']);rows.push(row);return;}
+    if(row.dup)row.flags.push(['重複','同一月份有 '+cnt[ym]+' 筆讀數，計算時被加總']);
+    used.forEach(([key,nm,ix])=>{const c=cur[ix],rate=cur[ix+1],p=pv?pv[ix]:(i?0:null);const o={cur:c,prev:p,rate};
+      if(c<0||rate<0)row.flags.push(['負值',nm+' 讀數或費率為負']);
+      if(p!=null){o.use=delta(p,c);o.fee=xround(o.use*rate);
+        if(!pv&&lastRead[key]!=null)row.flags.push(['上月不符',nm+' 前一月缺讀數，帳單上月以 0 計（最後讀數 '+lastRead[key]+'）']);
+        if(c<p){const bs=base(p);if(bs&&p>=bs*0.9&&o.use<bs*0.2)row.flags.push(['跳表',nm+' '+p+' → '+c+'，滿表歸零，系統算 '+o.use+' 度（舊算法少 1 度）']);else row.flags.push(['倒退',nm+' '+p+' → '+c+'，讀數變小，系統當跳表算成 '+o.use+' 度']);}
+        if(o.use<0)row.flags.push(['負值',nm+' 算出用量 '+o.use+' 度']);
+        if(o.use>0&&!rate)row.flags.push(['費率0',nm+' 有用量但費率為 0']);}
+      if(c)lastRead[key]=c;row.v[key]=o;});
+    rows.push(row);});
+  used.forEach(([key,nm])=>{const us=rows.filter(r=>!r.miss&&r.v[key]&&r.v[key].use!=null&&r.v[key].prev!=null&&r.v[key].cur>=r.v[key].prev).map(r=>r.v[key].use),md=med(us);
+    let z=0;rows.forEach((r,i)=>{const o=r.v[key];if(!o||o.use==null)return;
+      if(md>0&&o.use>3*md&&o.use-md>=20&&!r.flags.some(f=>(f[0]=='倒退'||f[0]=='跳表')&&f[1].startsWith(nm)))r.flags.push(['暴增',nm+' 用量 '+o.use+' 度，是中位數 '+md+' 的 '+(o.use/md).toFixed(1)+' 倍']);
+      const isW=key[0]=='w';if(o.use===0&&o.cur>0&&us.length&&us.filter(x=>x>0).length>=us.length/2&&billed(r.ym)){z++;if(!isW||z==3)r.flags.push(['零用量',nm+(isW?' 連續 3 個月':'')+' 用量 0 但本攤有計租']);}else z=0;});});
+  return {rows,meters:used.map(m=>m[0]),names:used.map(m=>m[1])};}
+g.MarketCalc={compute,merge,journal,pnl,xround,delta,prevYM,meterHist,allYM};
 })(typeof window!=='undefined'?window:globalThis);

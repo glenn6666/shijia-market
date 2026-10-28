@@ -35,3 +35,5 @@ table input{width:84px;padding:4px 6px;font-size:14px}.loc{background:#fff8e6}th
 .legend span::before{border:1px solid #bbb}
 .row input[type=checkbox]{min-width:0;width:auto}.tbl td,.tbl th{white-space:nowrap}
 @media(max-width:800px){header{flex-wrap:wrap}header h1{font-size:19px}.ymsel{font-size:12px}}
+
+table.mh tr.anom td{background:#fde8e6}table.mh td.fl{font-size:12px;color:#a93226;min-width:180px;white-space:normal}table.mh td{white-space:nowrap}

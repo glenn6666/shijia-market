@@ -68,6 +68,13 @@ function map(){const Lo=P.layout,leg=mapMode=='pay'?Object.keys(COL).map(k=>`<sp
  $('#mq').oninput=e=>{const q=U(e.target.value.trim()).replace(/^A(\d{1,2})$/,(m,n)=>'A'+n.padStart(3,'0'));$$('#p-map .t').forEach(g=>{const o=byId[U(g.dataset.id)],hit=q&&(U(g.dataset.id)==q||(q.length>=2&&o&&U(o.name).includes(q)));g.querySelector('rect').setAttribute('stroke-width',hit?4:.8);g.querySelector('rect').setAttribute('stroke',hit?'#000':ZONE[P.layout.tiles.find(t=>t.id==g.dataset.id).z][1]);if(hit)g.scrollIntoView({block:'center',inline:'center',behavior:'smooth'});});};}
 function txt(s,t,big){const fs=Math.min(t.h*0.55,(t.w-2)/Math.max(String(s).length*0.62,1),big?12:9.5);return `<text x="${t.x+t.w/2}" y="${t.y+t.h/2+fs*0.36}" font-size="${fs.toFixed(1)}" text-anchor="middle" fill="#222">${esc(s)}</text>`;}
 // ── 攤位資料卡
+function meterHistHtml(id){const H=MarketCalc.meterHist(D,id);if(!H.rows.length)return `<h3>水電錶紀錄</h3><p class="muted">這個攤位沒有水電讀數。</p>`;
+ const lab={e1:['電錶1','電費1'],e2:['電錶2','電費2'],w1:['水錶1','水費1'],w2:['水錶2','水費2']},one=k=>H.meters.filter(x=>x[0]==k[0]).length==1;
+ const nm=k=>one(k)?lab[k][0].slice(0,2):lab[k][0],fn=k=>one(k)?lab[k][1].slice(0,2):lab[k][1];
+ const head=['讀數月份'].concat(...H.meters.map(k=>[nm(k)+' 上月',nm(k)+' 本月',nm(k)+' 用量',fn(k)]),['異常']);
+ const c=v=>`<td class="n">${v==null?'—':num(v)}</td>`,nA=H.rows.filter(r=>r.flags.length).length;
+ const rows=H.rows.slice().reverse().map(r=>`<tr class="${r.flags.length?'anom':''}"><td>${r.y}/${r.m}</td>${H.meters.map(k=>{const o=r.v[k];return o?c(o.prev)+c(o.cur)+c(o.use)+c(o.fee):c()+c()+c()+c();}).join('')}<td class="fl">${r.flags.map(f=>`<b>${esc(f[0])}</b> ${esc(f[1])}`).join('<br>')}</td></tr>`);
+ return `<h3>水電錶紀錄（${H.rows.length} 個月，<span style="color:#c0392b">${nA} 個月有異常</span>）</h3><p class="muted" style="margin-top:0">讀數月份 N 月的費用列在 N+1 月帳單；用量照原表算法（跳表少 1 度）。</p>${tbl(head,rows,'mh')}`;}
 function card(id){const o=byId[U(id)];let h;const par=parentOf(id)||id,fam=[par].concat((KIDS[U(par)]||[]).map(k=>k.id)),tabs=fam.length>1?`<div class="tabs" style="margin:0 30px 10px 0">${fam.map(f=>`<button class="sm ${U(f)==U(id)?'on':''}" data-fam="${esc(f)}">${esc(f)}${byId[U(f)]?' '+LBL[status(byId[U(f)])]:''}</button>`).join('')}</div>`:'';
  if(!o){h=`<h2>${esc(id)}</h2><p class="muted">平面圖上有此攤號，但試算表「02攤位建檔資料庫」沒有這個攤位。</p><button id="newst">建立這個攤位</button>`;openM(tabs+h);bindFam();$('#newst').onclick=()=>editStall(null,id);return;}
  const s=status(o),r=o.rent,rd=o.read,q=(k,n)=>rd[k][0]||rd[k][1]?`<div><b>${n}</b>${rd[k][0]} → ${rd[k][1]}（${rd[k][2]} 度 × ${o.rate[k]}）</div>`:'';
@@ -78,7 +85,7 @@ function card(id){const o=byId[U(id)];let h;const par=parentOf(id)||id,fam=[par]
  <div><b>水電讀數月份</b>${o.pY.join('/')} → ${o.mY.join('/')}</div><div><b>合約</b>未登錄</div>${q('e1','電錶1')}${q('e2','電錶2')}${q('w1','水錶1')}${q('w2','水錶2')}</div>
  <div class="kpis" style="grid-template-columns:repeat(3,1fr);margin:12px 0"><div class="card kpi">本月應收<div class="v" style="font-size:18px">${fmt(o.due)}</div></div><div class="card kpi">本月已收<div class="v" style="font-size:18px">${fmt(o.paid)}</div></div><div class="card kpi">本月餘款<div class="v" style="font-size:18px">${fmt(o.bal)}</div></div></div>
  <div class="row"><button id="c-pay">登記繳費／銷帳</button><button id="c-ed" class="ghost">編輯攤位</button></div>
- <h3>繳費紀錄（最近 ${hs.length} 筆／共 ${o.hist.length} 筆）</h3>${tbl(['銷帳年月','日期','姓名','實收','方式','經手人'],hs.map(p=>`<tr class="${p.k[0]=='L'?'loc':''}"><td>${esc(p.y)}/${esc(p.m)}</td><td>${esc(p.d)}</td><td>${esc(p.nm)}</td><td class="n">${fmt(p.amt||0)}</td><td>${esc(p.pay||'')}${p.bill?' #'+esc(p.bill):''}</td><td>${esc(p.who||'')}</td></tr>`))}`;
+ <h3>繳費紀錄（最近 ${hs.length} 筆／共 ${o.hist.length} 筆）</h3>${tbl(['銷帳年月','日期','姓名','實收','方式','經手人'],hs.map(p=>`<tr class="${p.k[0]=='L'?'loc':''}"><td>${esc(p.y)}/${esc(p.m)}</td><td>${esc(p.d)}</td><td>${esc(p.nm)}</td><td class="n">${fmt(p.amt||0)}</td><td>${esc(p.pay||'')}${p.bill?' #'+esc(p.bill):''}</td><td>${esc(p.who||'')}</td></tr>`))}${meterHistHtml(o.id)}`;
  openM(tabs+h);bindFam();$('#c-pay').onclick=()=>payForm(o);$('#c-ed').onclick=()=>editStall(o);}
 function bindFam(){$$('#mbody [data-fam]').forEach(b=>b.onclick=()=>card(b.dataset.fam));}
 function openM(h){$('#mbody').innerHTML=h;$('#modal').hidden=false;}
