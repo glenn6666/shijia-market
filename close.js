@@ -19,13 +19,13 @@ const CSS=`.cl-pg{background:#fff;color:#000;font:9px "Microsoft JhengHei","PMin
 .cl-t{border-collapse:collapse;width:100%}.cl-t th{font-weight:bold;border-bottom:1px solid #9bb7d4;background:#dde9f6;text-align:right;padding:0 3px;white-space:nowrap}
 .cl-t th:nth-child(-n+2),.cl-t td:nth-child(-n+2){text-align:left}.cl-t td{text-align:right;padding:0 3px;line-height:1.25;white-space:nowrap}
 .cl-t td.id{font-weight:bold;background:#dde9f6}.cl-t tr.tot td{font-weight:bold;border-top:1px solid #9bb7d4;background:#dde9f6}
-@media print{@page{size:A4 portrait;margin:10mm}body *{visibility:hidden}#clprint,#clprint *{visibility:visible}#clprint{position:absolute;left:0;top:0}body[data-pr=jl] #clprint,body[data-pr=jl] #clprint *,body[data-pr=bl] #clprint,body[data-pr=bl] #clprint *{display:none}.cl-pg{margin:0;page-break-after:always}.cl-pg:last-child{page-break-after:auto}}`;
+@media print{@page{size:A4 portrait;margin:10mm}body *{visibility:hidden}#clprint,#clprint *{visibility:visible}#clprint{position:absolute;left:0;top:0}body[data-pr=jl] #clprint,body[data-pr=jl] #clprint *,body[data-pr=bl] #clprint,body[data-pr=bl] #clprint *,body[data-pr=ar] #clprint,body[data-pr=ar] #clprint *{display:none}.cl-pg{margin:0;page-break-after:always}.cl-pg:last-child{page-break-after:auto}}`;
 function render(o){const {D,el}=o;let y=o.Y,m=o.M;
   const yrs=[...new Set(D.meters.map(r=>+r[1]).concat(D.rents.map(r=>Math.floor(r[0]/100))).concat([y]))].filter(x=>x>100).sort();
-  const draw=()=>{const h=html(D,y,m);el.innerHTML=`<style>${CSS}${SJFLedger.CSS}${SJFBills.CSS}</style><div class="card noprint"><b>月底結帳統計表</b>　
+  let arA='',arS='id';const draw=()=>{const h=html(D,y,m),ua=SJFUnpaid.html(D,y,m,{area:arA,sort:arS});el.innerHTML=`<style>${CSS}${SJFLedger.CSS}${SJFBills.CSS}${SJFUnpaid.CSS}</style><div class="card noprint"><b>月底結帳統計表</b>　
    <select id="cly">${yrs.map(v=>`<option ${v==y?'selected':''}>${v}</option>`).join('')}</select> 年 <select id="clm">${Array.from({length:12},(_,i)=>`<option ${i+1==m?'selected':''}>${i+1}</option>`).join('')}</select> 月
-   <button id="clp">🖨️ 列印結帳統計表</button> <button id="jlp">🖨️ 列印流水帳報表</button> <button id="blp">🖨️ 列印票據報表</button><p class="muted">共 ${h.count} 列｜應收 ${h.T[7].toLocaleString()}｜已收 ${h.T[8].toLocaleString()}｜餘款 ${h.T[9].toLocaleString()}。只列本月應收不為 0 的攤位（同報表）。</p></div><div id="clprint">${h.body}</div><h3 class="noprint">流水帳報表</h3><div id="jlprint">${SJFLedger.html(D,y,m).body}</div><h3 class="noprint">票據報表（未到期）</h3><div id="blprint">${SJFBills.html(D,y,m).body}</div>`;
-   el.querySelector('#cly').onchange=ev=>{y=+ev.target.value;draw();};el.querySelector('#clm').onchange=ev=>{m=+ev.target.value;draw();};const pr=w=>{document.body.dataset.pr=w;window.print();};el.querySelector('#clp').onclick=()=>pr('cl');el.querySelector('#jlp').onclick=()=>pr('jl');el.querySelector('#blp').onclick=()=>pr('bl');};
+   <button id="clp">🖨️ 列印結帳統計表</button> <button id="jlp">🖨️ 列印流水帳報表</button> <button id="blp">🖨️ 列印票據報表</button> <button id="arp">🖨️ 列印未收款攤位</button><br>未收款篩選：區域 <select id="ara"><option value="">全部</option>${ua.areas.map(a=>`<option ${a==arA?'selected':''}>${a}</option>`).join('')}</select> 排序 <select id="ars"><option value="id">攤位編號</option><option value="bal" ${arS=='bal'?'selected':''}>未收金額大→小</option><option value="od" ${arS=='od'?'selected':''}>連續未繳月數多→少</option></select><p class="muted">共 ${h.count} 列｜應收 ${h.T[7].toLocaleString()}｜已收 ${h.T[8].toLocaleString()}｜餘款 ${h.T[9].toLocaleString()}。只列本月應收不為 0 的攤位（同報表）。</p></div><div id="clprint">${h.body}</div><h3 class="noprint">流水帳報表</h3><div id="jlprint">${SJFLedger.html(D,y,m).body}</div><h3 class="noprint">票據報表（未到期）</h3><div id="blprint">${SJFBills.html(D,y,m).body}</div><h3 class="noprint">每月未收款攤位</h3><div id="arprint">${ua.body}</div>`;
+   el.querySelector('#cly').onchange=ev=>{y=+ev.target.value;draw();};el.querySelector('#clm').onchange=ev=>{m=+ev.target.value;draw();};const pr=w=>{document.body.dataset.pr=w;window.print();};el.querySelector('#clp').onclick=()=>pr('cl');el.querySelector('#jlp').onclick=()=>pr('jl');el.querySelector('#blp').onclick=()=>pr('bl');el.querySelector('#arp').onclick=()=>pr('ar');el.querySelector('#ara').onchange=ev=>{arA=ev.target.value;draw();};el.querySelector('#ars').onchange=ev=>{arS=ev.target.value;draw();};};
   draw();}
 G.SJFClose={render,html,rows,CSS};
 })(typeof window!=='undefined'?window:globalThis);
@@ -41,7 +41,7 @@ const CSS=`.jl-pg{background:#fff;color:#000;font:10px "Microsoft JhengHei","PMi
 .jl-h{display:flex;gap:6mm;margin-bottom:3mm}.jl-h span{background:#fff2cc;padding:1px 4px}.jl-h b{margin-left:20mm;font-size:13px}
 .jl-t{border-collapse:collapse;width:100%}.jl-t th{background:#dde9f6;border-bottom:1px solid #9bb7d4;text-align:left;padding:1px 3px}
 .jl-t td{padding:0 3px;line-height:1.3}.jl-t td:last-child,.jl-t th:last-child{text-align:right}.jl-t tr.sub td{font-weight:bold;background:#dde9f6}.jl-t tr.tot td{font-weight:bold;border-top:1px solid #9bb7d4;background:#dde9f6}
-@media print{@page{size:A4 portrait;margin:10mm}body *{visibility:hidden}#jlprint,#jlprint *{visibility:visible}#jlprint{position:absolute;left:0;top:0}body[data-pr=cl] #jlprint,body[data-pr=cl] #jlprint *,body[data-pr=bl] #jlprint,body[data-pr=bl] #jlprint *{display:none}thead{display:table-header-group}}`;
+@media print{@page{size:A4 portrait;margin:10mm}body *{visibility:hidden}#jlprint,#jlprint *{visibility:visible}#jlprint{position:absolute;left:0;top:0}body[data-pr=cl] #jlprint,body[data-pr=cl] #jlprint *,body[data-pr=bl] #jlprint,body[data-pr=bl] #jlprint *,body[data-pr=ar] #jlprint,body[data-pr=ar] #jlprint *{display:none}thead{display:table-header-group}}`;
 function html(D,y,m){const g=groups(D,y,m);const rows=g.C.map(c=>c.rows.map(j=>`<tr><td>${e(c.cat)}</td><td>${e(j.seq)}</td><td>${e(j.date)}</td><td>${e(j.item)}</td><td>${j.who?e(j.who):'(空白)'}</td><td>${f(j.signed)}</td></tr>`).join('')+`<tr class="sub"><td colspan="5">${e(c.cat)} 合計</td><td>${f(c.sum)}</td></tr>`).join('');
   return {g,body:`<div class="jl-pg"><div class="jl-h"><span>年月</span><span>${g.ym}</span><b>流水帳報表</b></div><table class="jl-t"><thead><tr><th>類別</th><th>流水序號</th><th>日期</th><th>明細項目</th><th>經手人</th><th>加總 - 金額計算</th></tr></thead><tbody>${rows}<tr class="tot"><td colspan="5">總計</td><td>${f(g.total)}</td></tr></tbody></table></div>`};}
 G.SJFLedger={html,groups,CSS};
@@ -61,8 +61,32 @@ const CSS=`.bl-pg{background:#fff;color:#000;font:10px "Microsoft JhengHei","PMi
 .bl-h{display:flex;justify-content:flex-end;gap:6mm}.bl-h span{background:#fff2cc;padding:1px 4px}.bl-f{margin:2mm 0 4mm}.bl-f span{background:#fff2cc;padding:1px 4px;margin-right:6mm}
 .bl-t{border-collapse:collapse;width:100%}.bl-t th{background:#dde9f6;border-bottom:1px solid #9bb7d4;text-align:left;padding:1px 3px}.bl-t td{padding:2px 3px}
 .bl-t td:nth-child(-n+2),.bl-t td:last-child,.bl-t th:last-child{text-align:right}.bl-t tr.sub td{font-weight:bold;background:#dde9f6}.bl-t tr.tot td{font-weight:bold;border-top:1px solid #9bb7d4;background:#dde9f6}
-@media print{@page{size:A4 portrait;margin:10mm}body *{visibility:hidden}#blprint,#blprint *{visibility:visible}#blprint{position:absolute;left:0;top:0}body[data-pr=cl] #blprint,body[data-pr=cl] #blprint *,body[data-pr=jl] #blprint,body[data-pr=jl] #blprint *{display:none}thead{display:table-header-group}}`;
+@media print{@page{size:A4 portrait;margin:10mm}body *{visibility:hidden}#blprint,#blprint *{visibility:visible}#blprint{position:absolute;left:0;top:0}body[data-pr=cl] #blprint,body[data-pr=cl] #blprint *,body[data-pr=jl] #blprint,body[data-pr=jl] #blprint *,body[data-pr=ar] #blprint,body[data-pr=ar] #blprint *{display:none}thead{display:table-header-group}}`;
 function html(D,y,m,today){const g=groups(D,y,m,today);const rows=g.C.map(c=>c.rows.map(p=>`<tr><td>${e(p.y)}</td><td>${e(p.m)}</td><td>${e(p.st)}</td><td>${e(p.nm)}</td><td>${ds(p.due)}</td><td>${e(p.bill)}</td><td>${Math.round(+p.amt||0)}</td></tr>`).join('')+`<tr class="sub"><td colspan="6" style="text-align:left">${c.y} ${c.m} 合計</td><td>${c.sum}</td></tr>`).join('');
   return {g,body:`<div class="bl-pg"><div class="bl-h"><span>今天日期</span><span>${ds(g.today)}</span></div><div class="bl-f"><span>票據</span><span>(全部)</span></div><table class="bl-t"><thead><tr><th>銷帳(年)</th><th>銷帳(月)</th><th>攤位編號</th><th>租客姓名</th><th>票據到期日</th><th>票據編號</th><th>加總 - 總金額</th></tr></thead><tbody>${rows}<tr class="tot"><td colspan="6" style="text-align:left">總計</td><td>${g.total}</td></tr></tbody></table></div>`};}
 G.SJFBills={html,groups,CSS};
+})(typeof window!=='undefined'?window:globalThis);
+// 每月未收款攤位：用 MarketCalc.compute 的 due/paid/bal（與結帳統計表相同），bal>0 才列；逾期月數＝往前連續有餘款的月數（最多 24 個月）
+(function(G){
+const e=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const n=v=>Math.round(+v||0).toLocaleString('en-US');
+const area=id=>{const m=/^([^0-9-]*\d?停|[^0-9-]+)/.exec(String(id));return m?m[1].toUpperCase():'其他';};
+const COLS=[['租金',o=>o.rent.mon],['日租/臨租',o=>o.rent.day],['清潔費',o=>o.rent.clean],['電費',o=>o.elec],['水費',o=>o.water],['冰庫',o=>o.rent.ice],['停車',o=>o.rent.park],['本月應收',o=>o.due],['本月已收',o=>o.paid],['未收餘款',o=>o.bal]];
+function rows(D,y,m){const R=MarketCalc.compute(D,y,m).filter(o=>o.ar&&o.bal>0);const ids=new Set(R.map(o=>o.id));const od={};R.forEach(o=>od[o.id]=1);
+  let alive=new Set(ids),yy=y,mm=m;for(let i=0;i<23&&alive.size;i++){mm--;if(!mm){mm=12;yy--;}const P={};MarketCalc.compute(D,yy,mm).forEach(o=>P[o.id]=o);
+    alive.forEach(id=>{const o=P[id];if(o&&o.ar&&o.bal>0)od[id]++;else alive.delete(id);});}
+  R.forEach(o=>{o.area=area(o.id);o.od=od[o.id];});return R;}
+const CSS=`.ar-pg{background:#fff;color:#000;font:9.5px "Microsoft JhengHei","PMingLiU",sans-serif;width:190mm;margin:0 auto}.ar-pg h2{font-size:14px;text-align:center;margin:0 0 1mm}
+.ar-pg .sub{text-align:center;margin-bottom:2mm}.ar-t{border-collapse:collapse;width:100%}.ar-t th{background:#dde9f6;border-bottom:1px solid #9bb7d4;padding:1px 2px;white-space:nowrap}
+.ar-t td{padding:1px 2px;text-align:right;white-space:nowrap;border-bottom:1px solid #eee}.ar-t td:nth-child(-n+3){text-align:left}.ar-t tr.tot td{font-weight:bold;border-top:1px solid #9bb7d4;background:#dde9f6}
+@media print{@page{size:A4 portrait;margin:10mm}body *{visibility:hidden}#arprint,#arprint *{visibility:visible}#arprint{position:absolute;left:0;top:0}body[data-pr=cl] #arprint,body[data-pr=cl] #arprint *,body[data-pr=jl] #arprint,body[data-pr=jl] #arprint *,body[data-pr=bl] #arprint,body[data-pr=bl] #arprint *{display:none}thead{display:table-header-group}}`;
+function html(D,y,m,opt){opt=opt||{};let R=rows(D,y,m);const areas=[...new Set(R.map(o=>o.area))].sort();if(opt.area)R=R.filter(o=>o.area===opt.area);
+  const s=opt.sort||'id';R.sort(s=='bal'?(a,b)=>b.bal-a.bal:s=='od'?(a,b)=>b.od-a.od||b.bal-a.bal:(a,b)=>a.id<b.id?-1:a.id>b.id?1:0);
+  const T=COLS.map(c=>R.reduce((a,o)=>a+(+c[1](o)||0),0));
+  const body=`<div class="ar-pg"><h2>十甲發市場 每月未收款攤位</h2><div class="sub">${y} 年 ${m} 月｜區域：${e(opt.area||'全部')}｜共 ${R.length} 攤｜列印日 ${new Date().toLocaleDateString('zh-TW')}</div>
+   <table class="ar-t"><thead><tr><th>攤位編號</th><th>租客姓名</th><th>區域</th>${COLS.map(c=>`<th>${c[0]}</th>`).join('')}<th>連續未繳(月)</th></tr></thead><tbody>
+   ${R.map(o=>`<tr><td>${e(o.id)}</td><td>${e(o.name)}</td><td>${e(o.area)}</td>${COLS.map(c=>`<td>${n(c[1](o))}</td>`).join('')}<td>${o.od>=24?'24+':o.od}</td></tr>`).join('')}
+   <tr class="tot"><td colspan="3">合計</td>${T.map(v=>`<td>${n(v)}</td>`).join('')}<td></td></tr></tbody></table></div>`;
+  return {body,R,T,areas};}
+G.SJFUnpaid={html,rows,CSS};
 })(typeof window!=='undefined'?window:globalThis);
