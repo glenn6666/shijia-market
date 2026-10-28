@@ -172,7 +172,7 @@ function jr(){const J=MarketCalc.journal(D).filter(j=>j.ym==jrYM());const sum=k=
 // ── 損益
 function pl(){const p=MarketCalc.pnl(D,Y,M);
  $('#p-pl').innerHTML=`<div class="kpis"><div class="card kpi">營業收入（應收制）<div class="v">${fmt(p.inc.合計)}</div></div><div class="card kpi">營業支出<div class="v">${fmt(p.exp)}</div><div class="s">流水帳 ${p.ym}</div></div><div class="card kpi">營業收入（其他）<div class="v">${fmt(p.oth)}</div></div><div class="card kpi">總計<div class="v">${fmt(p.total)}</div></div></div>
- <div class="card">${tbl(['項目','金額'],Object.entries(p.inc).map(([k,v])=>`<tr><td>${k}</td><td class="n">${fmt(v)}</td></tr>`))}<p class="muted" style="font-size:12px">照原「損益」表：收入＝本月「應收」攤位的總租金、清潔、停車、冰庫、臨租（日租）、電費、水費（應收制，不是實收）；支出／其他收入取日帳流水帳 ${p.ym}（支出為負數）；總計＝三者相加。原表樞紐需手動重新整理，這裡即時計算。</p></div>`;}
+ <div class="card">${tbl(['項目','金額'],Object.entries(p.inc).map(([k,v])=>`<tr><td>${k}</td><td class="n">${fmt(v)}</td></tr>`))}<p class="muted" style="font-size:12px">照原「損益」表：收入＝本月「應收」攤位的總租金、清潔、停車、冰庫、臨租（日租）、電費、水費（應收制，不是實收）；支出／其他收入取日帳流水帳 ${p.ym}（支出為負數）；總計＝三者相加。原表樞紐需手動重新整理，這裡即時計算。</p></div>`;if(window.SJFPL)SJFPL.render({D,Y,M,el:$('#p-pl')});}
 // ── 未收款
 let arQ='';
 function ar(){const un=R.filter(o=>o.bal&&(!arQ||U(o.id+o.name).includes(U(arQ)))).sort((a,b)=>b.bal-a.bal),pos=un.filter(o=>o.bal>0),neg=un.filter(o=>o.bal<0);
