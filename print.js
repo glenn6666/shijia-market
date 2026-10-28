@@ -33,9 +33,11 @@ function fnum(v,nf){if(typeof v!=='number')return {t:String(v)};
   if(nf==176){return {t:xr(v)+'\u2009'};}
   if(Number.isInteger(v))return {t:String(v)};return {t:String(+v.toPrecision(10))};}
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+// 三聯單套印位置修正（依 LQ-310 試印照片，mm；負值=往上/往左）
+const TRI_OFF={H5:{x:-7,y:0},I6:{x:0,y:-2},I7:{x:0,y:-2},I9:{x:0,y:-2},I10:{x:0,y:-2},I13:{x:0,y:-2},I14:{x:0,y:-2},I16:{x:0,y:-2},I17:{x:0,y:-2},D25:{x:0,y:-3}};
 function cellHtml(c,v,showBorders){let txt=c.t!=null?{t:c.t}:null;if(c.f||c.a in v){txt=c.a in v?fnum(v[c.a],c.nf):null;}
   if(c.a=='H5'||/^G(5|25|45)$/.test(c.a))txt=c.a in v?{t:String(v[c.a])}:txt;
-  let st=`left:${c.x}mm;top:${c.y}mm;width:${c.w}mm;height:${c.h}mm;font-size:${c.sz}pt;`;
+  const off=(!showBorders&&c.tri&&TRI_OFF[c.a])||{x:0,y:0};let st=`left:${(c.x+off.x).toFixed(2)}mm;top:${(c.y+off.y).toFixed(2)}mm;width:${c.w}mm;height:${c.h}mm;font-size:${c.sz}pt;`;
   if(c.b)st+='font-weight:700;';
   const ja=c.ha=='center'||c.ha=='centerContinuous'?'center':c.ha=='right'?'flex-end':(c.ha=='left'||!c.ha&&!(txt&&/^-?[\d,.]+\s?$/.test(txt.t)))?'flex-start':'flex-end';
   const al=c.va=='top'?'flex-start':c.va=='center'?'center':'flex-end';st+=`justify-content:${ja};align-items:${al};`;
@@ -47,7 +49,7 @@ function cellHtml(c,v,showBorders){let txt=c.t!=null?{t:c.t}:null;if(c.f||c.a in
   return `<div class="pc" style="${st}">${txt&&txt.t!==''?`<span${txt.red?' style="color:#c00"':''}>${esc(txt.t)}</span>`:''}</div>`;}
 // 一攤一頁
 function pageHtml(fmt,D,o,Y,M,adj){const t=T[fmt],v=values(D,o,Y,M,fmt);
-  const body=t.cells.map(c=>cellHtml(c,v,fmt=='a4')).join('');
+  const body=t.cells.map(c=>cellHtml(fmt=='tri'?Object.assign({tri:1},c):c,v,fmt=='a4')).join('');
   // 照原檔：Letter 直式、四邊界 0.5 cm、「將所有欄放入單一頁面」→ 205.9/209.81 → Excel 取整 98%
   if(fmt=='tri')return `<div class="pg tri"><div class="pa" style="left:${5+adj.x}mm;top:${5+adj.y}mm;width:${t.w}mm;height:${t.h}mm;transform:scale(${TRI_SCALE});transform-origin:0 0">${body}</div></div>`;
   return `<div class="pg a4"><div class="pa" style="left:${28+adj.x}mm;top:${5+adj.y}mm;width:${t.w}mm;height:${t.h}mm;transform:scale(.8);transform-origin:0 0">${body}</div></div>`;}
