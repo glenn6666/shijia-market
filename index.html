@@ -4,14 +4,14 @@
 <input id="pw" type="password" placeholder="密碼" autocomplete="current-password"><button>進入</button><p id="gerr" class="err"></p></form></div>
 <div id="app" hidden>
 <aside id="side"><div class="brand"><div class="logo">十</div><div><b>十甲發市場</b><small>攤位租金後台</small></div></div>
-<nav><a data-p="ov">🏠 總覽</a><a data-p="map">🗺️ 攤位平面圖</a><a data-p="stall">🏷️ 攤位建檔</a><a data-p="pay">💵 繳費登記</a><a data-p="meter">⚡ 水電錶登記</a><a data-p="jr">📒 日帳流水帳</a><a data-p="pl">📈 損益</a><a data-p="ar">⏰ 未收款</a><a data-p="prt">🖨️ 列印繳費單</a><a data-p="close">📊 月底結帳報表</a><a data-p="data">💾 匯出／匯入</a></nav>
+<nav><a data-p="ov">🏠 總覽</a><a data-p="map">🗺️ 攤位平面圖</a><a data-p="stall">🏷️ 攤位建檔</a><a data-p="pay">💵 繳費登記</a><a data-p="meter">⚡ 水電錶登記</a><a data-p="jr">📒 日帳流水帳</a><a data-p="pl">📈 損益</a><a data-p="ar">⏰ 未收款</a><a data-p="prt">🖨️ 列印繳費單</a><a data-p="dep">🔐 已收保證金</a><a data-p="close">📊 月底結帳報表</a><a data-p="data">💾 匯出／匯入</a></nav>
 <div class="tip card">計算照原試算表舊算法（含跳表少 1 度等），核對後再改正。</div><button id="lock" class="ghost">🔒 登出</button></aside>
 <main><header><button id="menu" class="ghost">☰</button><h1 id="ttl">總覽</h1>
 <span class="ymsel">帳務月份 <select id="yy"></select> 年 <select id="mm"></select> 月</span>
 <span id="sync" class="muted" style="font-size:13px;white-space:nowrap" data-st="off"></span></header>
 <div id="localbar" class="warn"></div>
 <section id="p-ov"></section><section id="p-map"></section><section id="p-stall"></section><section id="p-pay"></section><section id="p-meter"></section>
-<section id="p-jr"></section><section id="p-pl"></section><section id="p-ar"></section><section id="p-prt"></section><section id="p-close"></section><section id="p-data"></section></main></div>
+<section id="p-jr"></section><section id="p-pl"></section><section id="p-ar"></section><section id="p-prt"></section><section id="p-dep"></section><section id="p-close"></section><section id="p-data"></section></main></div>
 <div id="modal" hidden><div class="card mbox"><button class="x" id="mx">✕</button><div id="mbody"></div></div></div>
 <div id="toast" hidden></div>
-<script src="calc.js?v=20261028h"></script><script src="print.js?v=20261028h"></script><script src="sync.js?v=20261028h"></script><script src="close.js?v=20261028h"></script><script src="plrep.js?v=20261028h"></script><script src="annual.js?v=20261028an1"></script><script src="app.js?v=20261028h"></script></body></html>
+<script src="calc.js?v=20261028h"></script><script src="print.js?v=20261028h"></script><script src="sync.js?v=20261028i"></script><script src="close.js?v=20261028h"></script><script src="plrep.js?v=20261028h"></script><script src="annual.js?v=20261028an1"></script><script src="dep.js?v=20261028i"></script><script src="app.js?v=20261028i"></script></body></html>

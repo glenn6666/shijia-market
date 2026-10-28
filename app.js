@@ -26,7 +26,7 @@ async function initSync(pw){L=S.stamp(L,null,Date.now(),LOCALT||Date.now());SNAP
  setInterval(()=>{if(!document.hidden)SE.run();},60000);addEventListener('online',()=>SE.run());document.addEventListener('visibilitychange',()=>{if(!document.hidden)SE.run();});}
 async function loadLocal(){const s=localStorage.getItem(LKEY);if(!s)return {};try{const o=JSON.parse(s);LOCALT=o.t||0;const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(o.iv)},KEY,b64(o.ct));return JSON.parse(new TextDecoder().decode(pt));}catch(e){toast('本機異動無法解密（可能密碼不同），已略過');return {};}}
 async function saveLocal(){L=S.stamp(L,SNAP,Date.now());SNAP=S.snap(L);await writeLocal();refresh();if(SE)SE.soon();}
-function cnt(){return (L.pay||[]).length+(L.payDel||[]).length+(L.meter||[]).length+(L.jr||[]).length+(L.jrDel||[]).length+(L.rent||[]).length+Object.keys(L.stall||{}).length+(L.stallNew||[]).length;}
+function cnt(){return (L.pay||[]).length+(L.payDel||[]).length+(L.meter||[]).length+(L.jr||[]).length+(L.jrDel||[]).length+(L.rent||[]).length+Object.keys(L.stall||{}).length+(L.stallNew||[]).length+Object.keys(L.dep||{}).length;}
 function toast(t){const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(e._t);e._t=setTimeout(()=>e.hidden=true,2500);}
 $('#gf').onsubmit=async e=>{e.preventDefault();$('#gerr').textContent='解密中…';try{P=await unlock($('#pw').value);sessionStorage.k=$('#pw').value;start();}catch(x){console.error(x);$('#gerr').textContent='密碼錯誤';}};
 if(sessionStorage.k){unlock(sessionStorage.k).then(p=>{P=p;start();}).catch(()=>sessionStorage.removeItem('k'));}
@@ -44,7 +44,7 @@ function refresh(){D=MarketCalc.merge(B,L);R=MarketCalc.compute(D,Y,M);byId={};c
  KIDS={};R.forEach(o=>{const p=parentOf(o.id);if(p)(KIDS[U(p)]=KIDS[U(p)]||[]).push(o);});
  const n=cnt();if(syncUrl()){$('#localbar').innerHTML=`☁️ 已開啟雲端同步：新增／修改會自動存到 Google 試算表（加密），其他裝置登入後會自動合併。目前共 <b>${n}</b> 筆異動。`;}else $('#localbar').innerHTML=`⚠️ 新增／修改的資料<b>只存在這台裝置的這個瀏覽器</b>（已加密），換手機／電腦或清除瀏覽器資料就看不到。${n?`目前有 <b>${n}</b> 筆本機異動，請到「匯出／匯入」定期備份。`:'目前沒有本機異動。'}`;
  render(page);}
-const PAGES={ov,map,stall,pay,meter,jr,pl,ar,data,close:()=>SJFClose.render({D,Y,M,el:$('#p-close')}),prt:()=>SJFPrint.render({D,R,Y,M,el:$('#p-prt')})};
+const PAGES={ov,map,stall,pay,meter,jr,pl,ar,data,dep:()=>SJFDep.render({B,L,el:$('#p-dep'),save:saveLocal}),close:()=>SJFClose.render({D,Y,M,el:$('#p-close')}),prt:()=>SJFPrint.render({D,R,Y,M,el:$('#p-prt')})};
 function go(p){page=p;$$('nav a').forEach(a=>a.classList.toggle('on',a.dataset.p==p));$$('main section').forEach(s=>s.hidden=s.id!='p-'+p);
  $('#ttl').textContent=$('nav a[data-p='+p+']').textContent.slice(2).trim();$('#side').classList.remove('open');render(p);}
 function render(p){PAGES[p]();}
