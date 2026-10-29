@@ -101,7 +101,7 @@ function page(){const el=document.getElementById('p-annual');if(!H){el.innerHTML
    <button id="anp">🖨️ 列印（A4 橫式）</button> <button id="anx" class="ghost">⬇️ 匯出 Excel</button> <button id="anl" class="ghost">🔒 上鎖</button>
    ${h.o.miss.length?`<details><summary>沒有資料來源、留空的欄位（${h.o.miss.length}）</summary><ul>${h.o.miss.map(m=>`<li>${e(m)}</li>`).join('')}</ul></details>`:''}</div>${h.cmp}<div id="anprint">${h.body}</div>`;
   el.querySelector('#any').onchange=ev=>{yy=+ev.target.value;page();};el.querySelector('#anm').onchange=ev=>{mode=ev.target.value;page();};
-  el.querySelector('#anp').onclick=()=>window.print();el.querySelector('#anl').onclick=()=>{H=null;D=null;page();};
+  el.querySelector('#anp').onclick=()=>SJFPrint.printArea('#anprint','A4 landscape');el.querySelector('#anl').onclick=()=>{H=null;D=null;page();};
   el.querySelector('#anx').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([xls(D,H,yy,mode)],{type:'application/vnd.ms-excel'}));a.download=`十甲發市場_${yy}年度報表.xls`;a.click();};}
 function inject(){const nav=document.querySelector('nav'),main=document.querySelector('main');if(!nav||!main||document.getElementById('p-annual'))return;
   const s=document.createElement('section');s.id='p-annual';s.hidden=true;main.appendChild(s);const a=document.createElement('a');a.textContent='🔐 年度報表';a.dataset.own='annual';nav.appendChild(a);

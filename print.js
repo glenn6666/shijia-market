@@ -64,7 +64,8 @@ const CSS=`.pg{position:relative;overflow:hidden;background:#fff;color:#000;box-
  font-family:"Microsoft JhengHei Light","微軟正黑體 Light","Microsoft JhengHei","微軟正黑體","Noto Sans CJK TC","Noto Sans TC",sans-serif;font-weight:300}
 .pg .pc span{display:block}
 #prtroot{display:none}
-@media print{body>*:not(#prtroot){display:none!important}#prtroot{display:block!important}#prtroot>.sheet{page-break-after:always;break-after:page}#prtroot>.sheet:last-child{page-break-after:auto;break-after:auto}
+#rptroot{display:none}
+@media print{body:not(.rpt)>*:not(#prtroot){display:none!important}body.rpt>*:not(#rptroot):not(#rptpage){display:none!important}body.rpt #rptroot{display:block!important;position:static!important}body.rpt #rptroot,body.rpt #rptroot *{visibility:visible!important}body:not(.rpt) #rptroot{display:none!important}#prtroot{display:block!important}#prtroot>.sheet{page-break-after:always;break-after:page}#prtroot>.sheet:last-child{page-break-after:auto;break-after:auto}
  html,body{margin:0!important;padding:0!important;background:#fff!important}}`;
 function ensureCss(){if(!document.getElementById('prtcss')){const s=document.createElement('style');s.id='prtcss';s.textContent=CSS;document.head.appendChild(s);}}
 function setPage(fmt,up){let s=document.getElementById('prtpage');if(!s){s=document.createElement('style');s.id='prtpage';document.head.appendChild(s);}
@@ -108,5 +109,14 @@ function sheets(fmt,D,L,Y,M,adj,up){let P;
   if(fmt=='tri'){P=[];for(let i=0;i<L.length;i+=2)P.push(pageHtml(fmt,D,L[i],Y,M,adj,L[i+1]||null));}
   else P=L.map(o=>pageHtml(fmt,D,o,Y,M,adj));
   return P.map(h=>`<div class="sheet">${h}</div>`).join('');}
-g.SJFPrint={render,values,pageHtml,printPages,sheets,CSS,T};
+// 報表列印：把指定區塊複製到 body 底下的 #rptroot 再列印（避免三聯單列印樣式把報表整頁藏掉而印出空白）
+function printArea(src,page){ensureCss();const el=typeof src=='string'?document.querySelector(src):src;if(!el)return alert('找不到要列印的內容');
+  let r=document.getElementById('rptroot');if(!r){r=document.createElement('div');r.id='rptroot';document.body.appendChild(r);}
+  let p=document.getElementById('rptpage');if(!p){p=document.createElement('style');p.id='rptpage';}document.body.appendChild(p);
+  p.textContent='@page{size:'+(page||'A4 portrait')+';margin:10mm}';
+  const css=[...(el.closest('section')||document).querySelectorAll('style')].map(x=>x.outerHTML).join('');
+  r.innerHTML=css+el.innerHTML;document.body.classList.add('rpt');
+  const done=()=>{document.body.classList.remove('rpt');r.innerHTML='';p.textContent='';window.removeEventListener('afterprint',done);};
+  window.addEventListener('afterprint',done);setTimeout(()=>{window.print();},60);}
+g.SJFPrint={printArea,render,values,pageHtml,printPages,sheets,CSS,T};
 })(typeof window!=='undefined'?window:globalThis);

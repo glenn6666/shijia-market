@@ -120,15 +120,29 @@ function editStall(o,newId){const r=o?o.rent:{};const ymd=Y*100+M;
   $('#modal').hidden=true;await saveLocal();toast('已儲存（只存在這台裝置）');};}
 // ── 繳費登記
 let pyQ='',pyAll=false,pyPg=0;
-function payForm(o,amt){const today=new Date().toISOString().slice(0,10);
- openM(`<h2>登記繳費／銷帳</h2><p class="muted">銷帳年月＝這筆錢沖哪個月的帳（本月已收依此歸月）。</p><div class="form">${F('p-st','攤位編號',o?o.id:'')}${F('p-nm','租客姓名',o?o.name:'')}${F('p-y','銷帳(年)',Y,'number')}${F('p-m','銷帳(月)',M,'number')}
+function payForm(o,amt){const today=new Date().toISOString().slice(0,10);const BP=(B.lk.paym||[]).find(x=>/票據/.test(x))||'票據';
+ openM(`<h2>登記繳費／銷帳</h2><p class="muted">銷帳年月＝這筆錢沖哪個月的帳（本月已收依此歸月）。同一次同時收現金＋票據：兩個金額都填，會存成兩筆（報表分開計）。</p><div class="form">${F('p-st','攤位編號',o?o.id:'')}${F('p-nm','租客姓名',o?o.name:'')}${F('p-y','銷帳(年)',Y,'number')}${F('p-m','銷帳(月)',M,'number')}
  ${F('p-d','繳費日期',today,'date')}${F('p-item','繳款項目','不分項目 月結款',null,B.lk.items)}${F('p-amt','實收/退金額（退款填負數）',amt!=null?amt:(o&&o.bal>0?o.bal:''),'number')}${F('p-paym','付款方式','現金',null,B.lk.paym)}
- ${F('p-bill','票據編號','')}${F('p-bdue','票據到期日','','date')}${F('p-inv','發票','',null,['','開發票'])}${F('p-who','經手人','')}${F('p-memo','備註','')}</div><datalist id="stl">${R.map(x=>`<option value="${esc(x.id)}">`).join('')}</datalist>
+ ${F('p-camt','另收票據金額（同時現金＋票據才填）','','number')}${F('p-bill','票據編號','')}${F('p-bdue','票據到期日','','date')}${F('p-inv','發票','',null,['','開發票'])}${F('p-who','經手人','')}${F('p-memo','備註','')}</div><datalist id="stl">${R.map(x=>`<option value="${esc(x.id)}">`).join('')}</datalist>
+ <div id="p-crw" class="warn" style="display:none;margin:8px 0"><label style="font-size:14px"><input type="checkbox" id="p-cr" style="width:auto"> <span id="p-crt"></span></label></div>
  <div class="row"><button id="p-save">儲存到這台裝置</button><span class="muted" id="p-hint"></span></div>`);
- $('#p-st').setAttribute('list','stl');const hint=()=>{const x=byId[U(V('p-st'))];if(x){if(!V('p-nm')||document.activeElement.id=='p-st')$('#p-nm').value=x.name;$('#p-hint').textContent=`${ymTxt()} 應收 ${fmt(x.due)}，已收 ${fmt(x.paid)}，餘款 ${fmt(x.bal)}`;}else $('#p-hint').textContent='查無此攤位';};$('#p-st').oninput=hint;hint();
- $('#p-save').onclick=async()=>{if(!byId[U(V('p-st'))])return alert('查無此攤位');if(V('p-amt')==='')return alert('請填金額');
-  const p={k:'L'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),st:V('p-st'),nm:V('p-nm'),y:String(+V('p-y')),m:String(+V('p-m')),d:V('p-d').replace(/-/g,'/'),item:V('p-item'),amt:+V('p-amt'),pay:V('p-paym'),bill:V('p-bill'),bdue:V('p-bdue').replace(/-/g,'/'),inv:V('p-inv'),who:V('p-who'),memo:V('p-memo'),local:1};
-  (L.pay=L.pay||[]).push(p);$('#modal').hidden=true;await saveLocal();toast(syncUrl()?'已登記':'已登記（只存在這台裝置）');};}
+ const ymOk=()=>+V('p-y')==Y&&+V('p-m')==M,tot=()=>(+V('p-amt')||0)+(+V('p-camt')||0);
+ const over=()=>{const x=byId[U(V('p-st'))];if(!x||!ymOk())return 0;const ex=tot()-Math.max(+x.bal||0,0);return ex>0?ex:0;};
+ const nym=()=>{const y=+V('p-y'),m=+V('p-m');return m==12?[y+1,1]:[y,m+1];};
+ $('#p-st').setAttribute('list','stl');const hint=()=>{const x=byId[U(V('p-st'))];if(x){if(!V('p-nm')||document.activeElement.id=='p-st')$('#p-nm').value=x.name;$('#p-hint').textContent=`${ymTxt()} 應收 ${fmt(x.due)}，已收 ${fmt(x.paid)}，餘款 ${fmt(x.bal)}，這次合計 ${fmt(tot())}`;}else $('#p-hint').textContent='查無此攤位';
+  const ex=over(),[ny,nm]=nym();$('#p-crw').style.display=ex>0?'':'none';$('#p-crt').textContent=`溢收 ${fmt(ex)} 元：勾選＝轉成 ${ny}/${nm} 的預收款，扣下個月帳單；不勾＝全部算本月`;};
+ ['p-st','p-amt','p-camt','p-y','p-m'].forEach(i=>$('#'+i).oninput=hint);hint();
+ $('#p-save').onclick=async()=>{if(!byId[U(V('p-st'))])return alert('查無此攤位');if(V('p-amt')===''&&V('p-camt')==='')return alert('請填金額');
+  const camt=+V('p-camt')||0,grp=camt||($('#p-cr').checked&&over()>0)?'G'+Date.now().toString(36):'';
+  const mk=(amt,pay,ck)=>({k:'L'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),st:V('p-st'),nm:V('p-nm'),y:String(+V('p-y')),m:String(+V('p-m')),d:V('p-d').replace(/-/g,'/'),item:V('p-item'),amt,pay,bill:ck?V('p-bill'):'',bdue:ck?V('p-bdue').replace(/-/g,'/'):'',inv:V('p-inv'),who:V('p-who'),memo:V('p-memo'),local:1,...(grp?{grp}:{})});
+  const main=+V('p-amt')||0,mainCk=/票據/.test(V('p-paym'));let P=[];
+  if(V('p-amt')!==''&&(main||!camt))P.push(mk(main,V('p-paym'),mainCk||!camt));
+  if(camt)P.push(mk(camt,BP,true));
+  if($('#p-cr').checked){let ex=over();const [ny,nm]=nym(),add=[];
+   P.sort((a,b)=>(/票據/.test(a.pay)?1:0)-(/票據/.test(b.pay)?1:0));// 先從現金那筆拆，票據盡量留在原月
+   for(const p of P){if(ex<=0)break;const t=Math.min(ex,p.amt);if(t<=0)continue;p.amt-=t;ex-=t;add.push({...p,k:p.k+'c',amt:t,y:String(ny),m:String(nm),memo:(p.memo?p.memo+'；':'')+`溢收款轉下月（${V('p-y')}/${V('p-m')} 溢收）`});}
+   P=P.filter(p=>p.amt).concat(add);}
+  (L.pay=L.pay||[]).push(...P);$('#modal').hidden=true;await saveLocal();toast((syncUrl()?'已登記':'已登記（只存在這台裝置）')+(P.length>1?`，共 ${P.length} 筆`:''));};}
 function pay(){const key=Y+'|'+M;let rows=D.pays.filter(p=>(pyAll||String(p.y)+'|'+String(p.m)==key)&&(!pyQ||U(p.st+p.nm).includes(U(pyQ))));rows=rows.slice().reverse();
  const tot=rows.reduce((a,p)=>a+(+p.amt||0),0),PG=200,pages=Math.ceil(rows.length/PG)||1;if(pyPg>=pages)pyPg=0;
  $('#p-pay').innerHTML=`<div class="card"><div class="row"><button id="py-new">＋ 新增繳費</button><input id="pyq" placeholder="攤位／姓名" value="${esc(pyQ)}"><label class="muted"><input type="checkbox" id="pyall" style="width:auto" ${pyAll?'checked':''}> 顯示全部月份</label><button class="ghost" id="pycsv">匯出 CSV</button></div>

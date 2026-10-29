@@ -29,7 +29,7 @@ function render(o){const {B,L,el,save}=o;const all=list(B,L);const areas=[...new
    <table><tr><th>編號</th><th>姓名</th><th>保證金</th><th>備註</th><th></th></tr>${R.map(r=>`<tr><td>${e(r.id)}</td><td>${e(r.nm)}</td><td class="n">${n(r.amt)}</td><td>${e(r.memo||'')}${r.edited?' <small class="muted">(已修改)</small>':''}</td><td><button class="sm" data-de="${e(r.k)}">修改</button> <button class="sm ghost" data-dd="${e(r.k)}">刪除</button></td></tr>`).join('')}</table></div>
    <div id="dpprint">${sheet(R,'已收保證金')}</div>`;
   const $=s=>el.querySelector(s),go=()=>render(o);
-  $('#dpq').onchange=ev=>{q=ev.target.value;go();};$('#dpa').onchange=ev=>{ar=ev.target.value;go();};$('#dpz').onchange=ev=>{zero=ev.target.checked;go();};$('#dpp').onclick=()=>window.print();
+  $('#dpq').onchange=ev=>{q=ev.target.value;go();};$('#dpa').onchange=ev=>{ar=ev.target.value;go();};$('#dpz').onchange=ev=>{zero=ev.target.checked;go();};$('#dpp').onclick=()=>SJFPrint.printArea('#dpprint','A4 portrait');
   $('#dfc').onclick=()=>['#dfi','#dfn','#dfa','#dfm','#dfk'].forEach(s=>$(s).value='');
   el.querySelectorAll('[data-de]').forEach(b=>b.onclick=()=>{const r=all.find(x=>x.k===b.dataset.de);$('#dfi').value=r.id;$('#dfn').value=r.nm;$('#dfa').value=r.amt;$('#dfm').value=r.memo||'';$('#dfk').value=r.k;$('#dfi').focus();});
   el.querySelectorAll('[data-dd]').forEach(b=>b.onclick=()=>{if(!confirm('刪除這筆保證金？'))return;L.dep=Object.assign({},L.dep);L.dep[b.dataset.dd]={del:1};save();});

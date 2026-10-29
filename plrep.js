@@ -23,6 +23,6 @@ function html(D,y,m){const b=build(D,y,m);const L=a=>a.map(([k,v])=>`<tr class="
   <tr class="s"><td>費用合計</td><td class="a">${$f(b.te)}</td></tr><tr class="h"><td>營餘</td><td class="a">${$f(b.net)}</td></tr></table></div>`};}
 function render(o){const h=html(o.D,o.Y,o.M);const d=document.createElement('div');
   d.innerHTML=`<style>${CSS}</style><div class="card"><b>損益表（${o.Y} 年 ${o.M} 月帳單＋流水帳 ${h.b.ym}）</b> <button id="plp">🖨️ 列印損益表（A4 直式）</button><p class="muted">「加租租金收入」網頁沒有資料來源，留空。月份用上方「帳務月份」選擇。</p></div><div id="plprint">${h.body}</div>`;
-  o.el.appendChild(d);d.querySelector('#plp').onclick=()=>window.print();}
+  o.el.appendChild(d);d.querySelector('#plp').onclick=()=>SJFPrint.printArea('#plprint','A4 portrait');}
 G.SJFPL={build,html,render,CSS};
 })(typeof window!=='undefined'?window:globalThis);
