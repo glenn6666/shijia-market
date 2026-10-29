@@ -104,17 +104,27 @@ const F=(id,label,val,type,opts)=>`<label>${label}${opts?`<select id="${id}">${o
 const V=id=>{const e=$('#'+id);return e?e.value.trim():'';};
 // ── 攤位建檔
 let stQ='';
-function stall(){const rows=R.filter(o=>!stQ||U(o.id+o.name+o.tel).includes(U(stQ))).map(o=>`<tr class="click" data-id="${esc(o.id)}"><td>${esc(o.id)}</td><td>${esc(o.name)}</td><td>${esc(o.tel)}</td><td class="n">${num(o.rent.mon)}</td><td class="n">${num(o.rent.ice)}</td><td class="n">${num(o.rent.park)}</td><td class="n">${num(o.rent.clean)}</td><td class="n">${num(o.rent.day)}</td><td class="n">${num(o.elec)}</td><td class="n">${num(o.water)}</td><td class="n">${fmt(o.due)}</td><td class="n">${fmt(o.paid)}</td><td class="n">${fmt(o.bal)}</td><td><button class="sm ghost" data-ed="${esc(o.id)}">編輯</button></td></tr>`);
- $('#p-stall').innerHTML=`<div class="card"><div class="row"><input id="stq" placeholder="搜尋攤號／姓名／電話" value="${esc(stQ)}"><button id="stnew">＋ 新增攤位</button><button class="ghost" id="stcsv">匯出 CSV</button><span class="muted">${rows.length} 攤・${ymTxt()}</span></div>
+let stOff=false;
+function stall(){if(stOff)return stallOff();const rows=R.filter(o=>!stQ||U(o.id+o.name+o.tel).includes(U(stQ))).map(o=>`<tr class="click" data-id="${esc(o.id)}"><td>${esc(o.id)}</td><td>${esc(o.name)}</td><td>${esc(o.tel)}</td><td class="n">${num(o.rent.mon)}</td><td class="n">${num(o.rent.ice)}</td><td class="n">${num(o.rent.park)}</td><td class="n">${num(o.rent.clean)}</td><td class="n">${num(o.rent.day)}</td><td class="n">${num(o.elec)}</td><td class="n">${num(o.water)}</td><td class="n">${fmt(o.due)}</td><td class="n">${fmt(o.paid)}</td><td class="n">${fmt(o.bal)}</td><td style="white-space:nowrap"><button class="sm ghost" data-ed="${esc(o.id)}">編輯</button> <button class="sm ghost" data-rm="${esc(o.id)}" title="攤位已經沒有了：從這個月起不再出帳">移除</button></td></tr>`);
+ $('#p-stall').innerHTML=`<div class="card"><div class="row"><input id="stq" placeholder="搜尋攤號／姓名／電話" value="${esc(stQ)}"><button id="stnew">＋ 新增攤位</button><button class="ghost" id="stcsv">匯出 CSV</button><button class="ghost" id="stoff">🗃️ 已移除攤位（${offList().length}）</button><span class="muted">${rows.length} 攤・${ymTxt()}</span></div>
  ${tbl(['攤位','租客','電話','月租','冰庫','停車','清潔','日租','電費','水費','應收','已收','餘款',''],rows)}</div><p class="muted" style="font-size:12px">租金照原表：取「攤位更新」中該攤年月範圍最大的一筆（不限 ≤ 本月）。編輯租金會新增一筆攤位更新紀錄。</p>`;
  $('#stq').oninput=e=>{stQ=e.target.value;const p=e.target.selectionStart;stall();$('#stq').focus();$('#stq').setSelectionRange(p,p);};
- $('#stnew').onclick=()=>editStall(null,'');$('#stcsv').onclick=()=>csv('攤位建檔_'+Y+'_'+M,stallSheet());$$('#p-stall [data-ed]').forEach(b=>b.onclick=()=>editStall(byId[U(b.dataset.ed)]));bindRows('#p-stall');}
+ $('#stnew').onclick=()=>editStall(null,'');$('#stcsv').onclick=()=>csv('攤位建檔_'+Y+'_'+M,stallSheet());$$('#p-stall [data-ed]').forEach(b=>b.onclick=e=>{e.stopPropagation();editStall(byId[U(b.dataset.ed)]);});$$('#p-stall [data-rm]').forEach(b=>b.onclick=e=>{e.stopPropagation();rmStall(b.dataset.rm);});$('#stoff').onclick=()=>{stOff=true;stall();};bindRows('#p-stall');}
+// ── 移除／復原攤位（軟刪除：只標記 off＝起始帳單年月，歷史資料與過去月份報表不受影響；走 L.stall 同步到其他裝置）
+const offList=()=>D.stalls.filter(s=>s.off);
+function setStall(id,patch){const k=U(id),s=D.stalls.find(x=>U(x.id)==k)||{};const cur=Object.assign({name:s.name||'',tel:s.tel||'',note:s.note||''},(L.stall||{})[k]||{});(L.stall=L.stall||{})[k]=Object.assign(cur,patch);}
+async function rmStall(id){const o=byId[U(id)]||{};const ymk=Y*100+M;
+ if(!confirm(`確定移除攤位 ${id}${o.name?'（'+o.name+'）':''}？\n\n從 ${Y} 年 ${M} 月起：不再出現在攤位建檔、繳費單／三聯單、未收款、月底報表與損益。\n${Y} 年 ${M} 月以前的帳、繳費紀錄、水電紀錄都會保留。\n之後可在「已移除攤位」復原。`+(o.bal>0?`\n\n⚠️ 這攤本月還有餘款 ${o.bal.toLocaleString()} 元。`:'')))return;
+ setStall(id,{off:ymk,offAt:new Date().toISOString().slice(0,10)});await saveLocal();toast('已移除 '+id+'（自 '+Y+'/'+M+' 起）');}
+function stallOff(){const rows=offList().map(s=>`<tr><td>${esc(s.id)}</td><td>${esc(s.name)}</td><td>${Math.floor(s.off/100)}/${s.off%100}</td><td>${esc(s.offAt||'')}</td><td><button class="sm" data-rs="${esc(s.id)}">復原</button></td></tr>`);
+ $('#p-stall').innerHTML=`<div class="card"><div class="row"><button class="ghost" id="stback">← 回攤位建檔</button><span class="muted">已移除 ${rows.length} 攤</span></div>${rows.length?tbl(['攤位','租客','自帳單年月起移除','移除日期',''],rows):'<p class="muted">目前沒有已移除的攤位。</p>'}</div><p class="muted" style="font-size:12px">已移除的攤位在「自帳單年月」之前的月份照常計算與列印；復原後立即恢復出帳。</p>`;
+ $('#stback').onclick=()=>{stOff=false;stall();};$$('#p-stall [data-rs]').forEach(b=>b.onclick=async()=>{if(!confirm('復原攤位 '+b.dataset.rs+'？'))return;setStall(b.dataset.rs,{off:0,offAt:''});await saveLocal();toast('已復原 '+b.dataset.rs);});}
 function editStall(o,newId){const r=o?o.rent:{};const ymd=Y*100+M;
  openM(`<h2>${o?'編輯攤位 '+esc(o.id):'新增攤位'}</h2><div class="form">${F('e-id','攤位編號',o?o.id:newId)}${F('e-nm','租客姓名（空白＝空攤）',o?o.name:'')}${F('e-tel','電話',o?o.tel:'')}${F('e-note','備註',o?o.note:'')}</div>
  <h3>租金（新增一筆攤位更新）</h3><div class="form">${F('e-ym','年月範圍 yyyMM',r.ym&&r.ym>=ymd?r.ym:ymd,'number')}${F('e-type','日租/月租',r.type||'月租',null,['月租','日租'])}${F('e-day','攤位(日租)',r.day||0,'number')}${F('e-mon','攤位(月租)',r.mon||0,'number')}${F('e-ice','冰庫(月租)',r.ice||0,'number')}${F('e-park','停車位租金',r.park||0,'number')}${F('e-cl','清潔費',r.clean||0,'number')}</div>
  <label class="muted" style="font-size:13px"><input type="checkbox" id="e-rent" style="width:auto"> 同時儲存租金變更</label><div class="row" style="margin-top:10px"><button id="e-save">儲存到這台裝置</button></div>`);
  $('#e-save').onclick=async()=>{const id=V('e-id');if(!id)return alert('請填攤位編號');
-  if(o&&U(id)==U(o.id)){(L.stall=L.stall||{})[U(id)]={name:V('e-nm'),tel:V('e-tel'),note:V('e-note')};}
+  if(o&&U(id)==U(o.id)){setStall(id,{name:V('e-nm'),tel:V('e-tel'),note:V('e-note')});}
   else{if(byId[U(id)])return alert('攤位編號已存在');(L.stallNew=L.stallNew||[]).push({id,name:V('e-nm'),tel:V('e-tel'),note:V('e-note')});}
   if($('#e-rent').checked||!o){(L.rent=(L.rent||[]).filter(x=>!(x[0]==+V('e-ym')&&U(x[1])==U(id)))).push([+V('e-ym'),id,V('e-nm'),V('e-type'),+V('e-day'),+V('e-mon'),+V('e-ice'),+V('e-park'),+V('e-cl')]);}
   $('#modal').hidden=true;await saveLocal();toast('已儲存（只存在這台裝置）');};}
@@ -158,7 +168,7 @@ function pay(){const key=Y+'|'+M;let rows=D.pays.filter(p=>(pyAll||String(p.y)+'
 let mtQ='',mtOnly=true;
 function meter(){const [my,mm]=MarketCalc.prevYM(Y,M),[py,pm]=MarketCalc.prevYM(my,mm);
  const cur={},prev={};D.meters.forEach(r=>{const k=U(r[0]);if(r[1]==my&&r[2]==mm)cur[k]=r;if(r[1]==py&&r[2]==pm)prev[k]=r;});const lk=new Set((L.meter||[]).map(r=>U(r[0])+'|'+r[1]+'|'+r[2]));
- const list=D.stalls.filter(s=>(!mtOnly||cur[U(s.id)]||prev[U(s.id)])&&(!mtQ||U(s.id+s.name).includes(U(mtQ))));
+ const list=D.stalls.filter(s=>!MarketCalc.isOff(s,Y,M)&&(!mtOnly||cur[U(s.id)]||prev[U(s.id)])&&(!mtQ||U(s.id+s.name).includes(U(mtQ))));
  const rows=list.map(s=>{const k=U(s.id),c=cur[k]||[s.id,my,mm,0,8,0,8,0,8,0,8,''],p=prev[k]||[0,0,0,0,0,0,0,0,0,0,0,0];
   const dl=(i)=>MarketCalc.delta(+p[i]||0,+c[i]||0);return `<tr class="${lk.has(k+'|'+my+'|'+mm)?'loc':''}" data-id="${esc(s.id)}"><td>${esc(s.id)}</td><td>${esc(s.name)}</td>
   <td class="n">${num(p[3])}</td><td><input data-i="3" value="${c[3]}"></td><td class="n d3">${dl(3)}</td><td><input data-i="4" value="${c[4]}"></td>
