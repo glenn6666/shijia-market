@@ -21,21 +21,33 @@ function syncStatus(st,msg){const e=$('#sync');if(!e)return;const[i,t]=SLBL[st]|
 async function writeLocal(){const iv=crypto.getRandomValues(new Uint8Array(12));const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},KEY,new TextEncoder().encode(JSON.stringify(L)));
  try{localStorage.setItem(LKEY,JSON.stringify({iv:tob64(iv),ct:tob64(ct),t:Date.now()}));}catch(e){alert('瀏覽器儲存空間不足，請先匯出備份');}}
 async function initSync(pw){L=S.stamp(L,null,Date.now(),LOCALT||Date.now());SNAP=S.snap(L);SK=await S.keys(pw);
- SE=S.Engine({url:syncUrl,token:SK.token,key:SK.key,device:devId(),getL:()=>L,setL:async M=>{L=M;SNAP=S.snap(L);await writeLocal();refresh();toast('已從雲端合併其他裝置的異動');},setBase:t=>localStorage.sjf_sync_base=t,status:syncStatus});
+ SE=S.Engine({url:syncUrl,token:SK.token,key:SK.key,device:devId(),getL:()=>L,setL:async M=>{L=M;SNAP=S.snap(L);await writeLocal();await permRefresh();refresh();toast('已從雲端合併其他裝置的異動');},setBase:t=>localStorage.sjf_sync_base=t,status:syncStatus});
  syncStatus(syncUrl()?'pending':'off');SE.run();
  setInterval(()=>{if(!document.hidden)SE.run();},60000);addEventListener('online',()=>SE.run());document.addEventListener('visibilitychange',()=>{if(!document.hidden)SE.run();});}
 async function loadLocal(){const s=localStorage.getItem(LKEY);if(!s)return {};try{const o=JSON.parse(s);LOCALT=o.t||0;const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(o.iv)},KEY,b64(o.ct));return JSON.parse(new TextDecoder().decode(pt));}catch(e){toast('本機異動無法解密（可能密碼不同），已略過');return {};}}
-async function saveLocal(){L=S.stamp(L,SNAP,Date.now());SNAP=S.snap(L);await writeLocal();refresh();if(SE)SE.soon();}
+addEventListener('unhandledrejection',e=>{if(e.reason&&e.reason.message=='blocked')e.preventDefault();});
+const A=window.SJFAudit;let PERM={cfg:{p:A.DEF,t:0},state:'none'};
+const opName=()=>localStorage.sjf_op||'';
+async function permRefresh(){PERM=await A.current(L);}
+function lockedSec(sec){return !A.isOwner()&&PERM.cfg.p[sec]=='view';}
+// 所有修改都經過這裡：檢查權限 → 記修改紀錄 → 存檔＋同步
+async function saveLocal(opt){const ch=A.diff(SNAP,S.snap(L));
+ if(ch.length){const bl=A.blocked(ch,PERM.cfg);
+  if(bl.length){const m={};for(const k in SNAP)m[k]=JSON.parse(SNAP[k]);const N=S.fromMap(m,L._ts||{});N._ts=L._ts;N._del=L._del;L=N;$('#modal').hidden=true;refresh();
+   alert('這台目前是員工身分，以下項目老闆設定為「只能看」，這次修改沒有存：\n\n'+bl.join('\n')+'\n\n要修改請找老闆，或到「修改紀錄」用老闆密碼解鎖。');throw new Error('blocked');}
+  const lg=(L.log||[]).concat(A.mkLog(ch,opName(),opt&&opt.undo));L.log=lg.length>6000?lg.slice(-6000):lg;}
+ L=S.stamp(L,SNAP,Date.now());SNAP=S.snap(L);await writeLocal();await permRefresh();refresh();if(SE)SE.soon();}
 function cnt(){return (L.pay||[]).length+(L.payDel||[]).length+(L.meter||[]).length+(L.jr||[]).length+(L.jrDel||[]).length+(L.rent||[]).length+Object.keys(L.stall||{}).length+(L.stallNew||[]).length+Object.keys(L.dep||{}).length;}
 function toast(t){const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(e._t);e._t=setTimeout(()=>e.hidden=true,2500);}
-$('#gf').onsubmit=async e=>{e.preventDefault();$('#gerr').textContent='解密中…';try{P=await unlock($('#pw').value);sessionStorage.k=$('#pw').value;start();}catch(x){console.error(x);$('#gerr').textContent='密碼錯誤';}};
+$('#gf').onsubmit=async e=>{e.preventDefault();const op=$('#opn').value.trim();if(!op){$('#gerr').textContent='請填使用者名稱（修改紀錄會記是誰改的）';return;}localStorage.sjf_op=op;$('#gerr').textContent='解密中…';try{P=await unlock($('#pw').value);sessionStorage.k=$('#pw').value;start();}catch(x){console.error(x);$('#gerr').textContent='密碼錯誤';}};
 if(sessionStorage.k){unlock(sessionStorage.k).then(p=>{P=p;start();}).catch(()=>sessionStorage.removeItem('k'));}
+if($('#opn'))$('#opn').value=opName();
 $('#lock').onclick=()=>{sessionStorage.removeItem('k');location.reload();};
 // 子攤位：編號尾端為「-數字」（十甲3-、東光27-、東光4- 結尾沒有數字，視為獨立攤位原樣保留）
 function parentOf(id){const m=/^(.+)-\d+$/.exec(id);return m?m[1]:null;}
 function status(o){if(!o)return'nodata';if(o.due==null||o.due===0)return o.paid>0?'over':'empty';if(o.paid<=0)return'unpaid';if(o.bal===0)return'paid';return o.bal<0?'over':'part';}
 let page='ov';
-async function start(){B=P.data;L=await loadLocal();await initSync(sessionStorage.k);await loadPQ();setInterval(flushPhotos,90000);setTimeout(flushPhotos,3000);[Y,M]=B.ym;
+async function start(){B=P.data;L=await loadLocal();await initSync(sessionStorage.k);await permRefresh();if(!opName()){const n=(prompt('請輸入使用者名稱（例如：小美），修改紀錄會記是誰改的')||'').trim();localStorage.sjf_op=n||'未填';}whoBadge();await loadPQ();setInterval(flushPhotos,90000);setTimeout(flushPhotos,3000);[Y,M]=B.ym;
  $('#yy').innerHTML=Array.from({length:20},(_,i)=>`<option>${111+i}</option>`).join('');$('#mm').innerHTML=Array.from({length:12},(_,i)=>`<option>${i+1}</option>`).join('');
  $('#yy').value=Y;$('#mm').value=M;$('#yy').onchange=$('#mm').onchange=()=>{Y=+$('#yy').value;M=+$('#mm').value;refresh();};
  $('#gate').hidden=true;$('#app').hidden=false;$$('nav a').forEach(a=>a.onclick=()=>go(a.dataset.p));$('#menu').onclick=()=>$('#side').classList.toggle('open');refresh();go('ov');}
@@ -62,10 +74,12 @@ function remind(){const el=$('#remind');if(!el)return;const t=today(),d=t.getDat
  el.className='remind'+(is28?' hot':'');el.hidden=false;
  el.innerHTML=`<div class="rm-t">📅 ${when}</div><div class="rm-b"><span>⚡ 電錶：全部攤位　<b>還沒登記 ${eT} 攤</b></span><span>💧 水錶：${water}${wAll||wq.length?`　<b>還沒登記 ${wT} 攤</b>`:''}</span>${phs.length?`<span>📷 電錶要拍照：${phs.map(esc).join('、')}${pT.length?`　<b>還沒拍 ${pT.length} 攤</b>`:'　✅ 都拍了'}</span>`:''}</div><button class="sm" id="rm-go">前往水電錶登記（${ry}/${rm} 讀數）</button>`;
  $('#rm-go').onclick=()=>{[Y,M]=rm==12?[ry+1,1]:[ry,rm+1];$('#yy').value=Y;$('#mm').value=M;mtTodo=true;refresh();go('meter');};}
-const PAGES={ov,map,stall,pay,meter,jr,pl,ar,data,dep:()=>SJFDep.render({B,L,el:$('#p-dep'),save:saveLocal}),close:()=>SJFClose.render({D,Y,M,el:$('#p-close')}),prt:()=>SJFPrint.render({D,R,Y,M,el:$('#p-prt')})};
+function whoBadge(){const e=$('#who');if(!e)return;e.innerHTML=`👤 ${esc(opName())}${A.isOwner()?' <b class="own">老闆</b>':''}`;e.onclick=()=>{const n=(prompt('更改使用者名稱',opName())||'').trim();if(n){localStorage.sjf_op=n;whoBadge();}};}
+const PAGES={log:()=>SJFLog.render({el:$('#p-log'),L:()=>L,setL:x=>{L=x;},save:saveLocal,B,perm:()=>PERM,whoBadge,refresh}),ov,map,stall,pay,meter,jr,pl,ar,data,dep:()=>SJFDep.render({B,L,el:$('#p-dep'),save:saveLocal}),close:()=>SJFClose.render({D,Y,M,el:$('#p-close')}),prt:()=>SJFPrint.render({D,R,Y,M,el:$('#p-prt')})};
 function go(p){page=p;$$('nav a').forEach(a=>a.classList.toggle('on',a.dataset.p==p));$$('main section').forEach(s=>s.hidden=s.id!='p-'+p);
  $('#ttl').textContent=$('nav a[data-p='+p+']').textContent.slice(2).trim();$('#side').classList.remove('open');render(p);}
-function render(p){PAGES[p]();}
+const PSEC={stall:'stall',pay:'pay',meter:'meter',jr:'jr',dep:'dep'};
+function render(p){PAGES[p]();const sec=PSEC[p],el=$('#p-'+p);if(sec&&lockedSec(sec)&&el)el.insertAdjacentHTML('afterbegin','<div class="ro-bar">🔒 老闆設定這一頁員工<b>只能看、不能改</b>，按存檔也不會存。</div>');}
 const ymTxt=()=>`${Y} 年 ${M} 月`;
 function tbl(head,rows,cls){return `<div class="tbl"><table class="${cls||''}"><thead><tr>${head.map(h=>`<th class="${/^(應收|已收|餘款|金額|實收|月租|冰庫|停車|清潔|日租|電費|水費|度數|金額計算)/.test(h)?'n':''}">${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;}
 function stRow(o,extra){return `<tr class="click" data-id="${esc(o.id)}"><td>${esc(o.id)}</td><td>${esc(o.name)}</td><td class="n">${fmt(o.due)}</td><td class="n">${fmt(o.paid)}</td><td class="n">${fmt(o.bal)}</td>${extra||''}</tr>`;}
@@ -222,6 +236,7 @@ function meter(){const [my,mm]=MarketCalc.prevYM(Y,M),[py,pm]=MarketCalc.prevYM(
   const ks=new Set(ch.map(r=>U(r[0])));L.meter=(L.meter||[]).filter(r=>!(ks.has(U(r[0]))&&r[1]==my&&r[2]==mm)).concat(ch);await saveLocal();toast(`已整批存入 ${ch.length} 攤讀數`);meter();};
  $$('#p-meter tr[data-id]').forEach(tr=>{const id=tr.dataset.id,p=prev[U(id)]||[];tr.oninput=()=>{[3,5,7,9].forEach(i=>tr.querySelector('.d'+i).textContent=MarketCalc.delta(+p[i]||0,+tr.querySelector(`[data-i="${i}"]`).value||0));};
   tr.querySelector('[data-sv]').onclick=async()=>{const c=cur[U(id)];const row=[id,my,mm];for(let i=3;i<=10;i++)row.push(+tr.querySelector(`[data-i="${i}"]`).value||0);row.push(c?c[11]:'');
+   const bw=[3,5,7,9].filter(i=>(+p[i]||0)>0&&row[i]<(+p[i]||0)).map(i=>['電1','電2','水1','水2'][(i-3)/2]+` ${p[i]}→${row[i]}`);if(bw.length&&!confirm(`${id} 度數比上月小（會當跳表算）：\n${bw.join('\n')}\n\n確定存入？`))return;
    L.meter=(L.meter||[]).filter(r=>!(U(r[0])==U(id)&&r[1]==my&&r[2]==mm));L.meter.push(row);await saveLocal();toast(id+(syncUrl()?' 讀數已存':' 讀數已存（只存在這台裝置）'));};});}
 // ── 電錶照片：拍照→加日期浮水印→加密→排隊（IndexedDB）→有設定雲端同步就上傳到 Google 雲端硬碟，參照存在 L.photo["攤位|年|月"]
 const PQ=new Map();const PH=window.SJFPhoto;
