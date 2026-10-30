@@ -17,7 +17,7 @@ let SNAP=null,SE=null,SK=null,LOCALT=0;const SURL='sjf_sync_url',S=window.SJFSyn
 const syncUrl=()=>(localStorage.getItem(SURL)||'').trim();
 const devId=()=>localStorage.sjf_dev||(localStorage.sjf_dev=(navigator.platform||'dev').slice(0,12)+'-'+Math.random().toString(36).slice(2,8));
 const SLBL={off:['⚪','未設定雲端同步'],busy:['🔄','同步中…'],pending:['🕒','等待同步…'],ok:['🟢','已同步'],offline:['🟠','離線，資料先存在這台，連線後自動同步'],err:['🔴','同步失敗']};
-function syncStatus(st,msg){const e=$('#sync');if(!e)return;const[i,t]=SLBL[st]||SLBL.err;e.textContent=i+' '+t+(st=='ok'?' '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}):'');e.title=msg||'';e.dataset.st=st;}
+function syncStatus(st,msg){const e=$('#sync');if(!e)return;const[i,t]=SLBL[st]||SLBL.err;e.textContent=i+' '+t+(st=='ok'?' '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}):'');e.title=msg||'';e.dataset.st=st;if(st=='ok')setTimeout(flushPhotos,500);}
 async function writeLocal(){const iv=crypto.getRandomValues(new Uint8Array(12));const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},KEY,new TextEncoder().encode(JSON.stringify(L)));
  try{localStorage.setItem(LKEY,JSON.stringify({iv:tob64(iv),ct:tob64(ct),t:Date.now()}));}catch(e){alert('瀏覽器儲存空間不足，請先匯出備份');}}
 async function initSync(pw){L=S.stamp(L,null,Date.now(),LOCALT||Date.now());SNAP=S.snap(L);SK=await S.keys(pw);
@@ -35,7 +35,7 @@ $('#lock').onclick=()=>{sessionStorage.removeItem('k');location.reload();};
 function parentOf(id){const m=/^(.+)-\d+$/.exec(id);return m?m[1]:null;}
 function status(o){if(!o)return'nodata';if(o.due==null||o.due===0)return o.paid>0?'over':'empty';if(o.paid<=0)return'unpaid';if(o.bal===0)return'paid';return o.bal<0?'over':'part';}
 let page='ov';
-async function start(){B=P.data;L=await loadLocal();await initSync(sessionStorage.k);[Y,M]=B.ym;
+async function start(){B=P.data;L=await loadLocal();await initSync(sessionStorage.k);await loadPQ();setInterval(flushPhotos,90000);setTimeout(flushPhotos,3000);[Y,M]=B.ym;
  $('#yy').innerHTML=Array.from({length:20},(_,i)=>`<option>${111+i}</option>`).join('');$('#mm').innerHTML=Array.from({length:12},(_,i)=>`<option>${i+1}</option>`).join('');
  $('#yy').value=Y;$('#mm').value=M;$('#yy').onchange=$('#mm').onchange=()=>{Y=+$('#yy').value;M=+$('#mm').value;refresh();};
  $('#gate').hidden=true;$('#app').hidden=false;$$('nav a').forEach(a=>a.onclick=()=>go(a.dataset.p));$('#menu').onclick=()=>$('#side').classList.toggle('open');refresh();go('ov');}
@@ -43,7 +43,25 @@ function refresh(){D=MarketCalc.merge(B,L);R=MarketCalc.compute(D,Y,M);byId={};c
  R.forEach(o=>{byId[U(o.id)]=o;o.cust=c[U(o.id)+'|'+o.name];if(!o.tel&&o.cust)o.tel=o.cust.tel;});
  KIDS={};R.forEach(o=>{const p=parentOf(o.id);if(p)(KIDS[U(p)]=KIDS[U(p)]||[]).push(o);});
  const n=cnt();if(syncUrl()){$('#localbar').innerHTML=`☁️ 已開啟雲端同步：新增／修改會自動存到 Google 試算表（加密），其他裝置登入後會自動合併。目前共 <b>${n}</b> 筆異動。`;}else $('#localbar').innerHTML=`⚠️ 新增／修改的資料<b>只存在這台裝置的這個瀏覽器</b>（已加密），換手機／電腦或清除瀏覽器資料就看不到。${n?`目前有 <b>${n}</b> 筆本機異動，請到「匯出／匯入」定期備份。`:'目前沒有本機異動。'}`;
- render(page);}
+ remind();render(page);}
+// ── 抄表提醒：每月 28 號抄電錶（全部）；水錶依攤位 wq（預設 4、10 月；每季 1、4、7、10 月）。25 號到月底顯示，28 號加強；1–5 號提醒上月還沒登記的
+function today(){const q=/[?&]today=(\d{4})-(\d\d)-(\d\d)/.exec(location.search);return q?new Date(+q[1],q[2]-1,+q[3]):new Date();}
+function readStat(ry,rm){const [py,pm]=MarketCalc.prevYM(ry,rm),cur={},prev={};D.meters.forEach(r=>{const k=U(r[0]);if(r[1]==ry&&r[2]==rm)cur[k]=r;if(r[1]==py&&r[2]==pm)prev[k]=r;});
+ const lk=new Set((L.meter||[]).filter(r=>r[1]==ry&&r[2]==rm).map(r=>U(r[0])));
+ const [by,bm]=rm==12?[ry+1,1]:[ry,rm+1],act=D.stalls.filter(s=>!MarketCalc.isOff(s,by,bm)&&(cur[U(s.id)]||prev[U(s.id)]));
+ const same=(k,ix)=>{const c=cur[k],p=prev[k];if(p&&ix.every(i=>!+p[i])&&(!c||ix.every(i=>!+c[i])))return false;if(!c)return true;if(lk.has(k))return false;return ix.every(i=>(+c[i]||0)==(+p?.[i]||0));};
+ const st={},ph=new Set(Object.keys(L.photo||{}).filter(k=>k.endsWith('|'+ry+'|'+rm)).map(k=>k.split('|')[0]));
+ act.forEach(s=>{const k=U(s.id),w=MarketCalc.waterDue(s,rm);st[k]={s,w,eTodo:same(k,[3,5]),wTodo:w&&same(k,[7,9]),ph:!!s.ph,phTodo:!!s.ph&&!ph.has(k)};});return st;}
+function remind(){const el=$('#remind');if(!el)return;const t=today(),d=t.getDate(),last=new Date(t.getFullYear(),t.getMonth()+1,0).getDate();
+ let ry=t.getFullYear()-1911,rm=t.getMonth()+1,late=false;if(d<=5){[ry,rm]=MarketCalc.prevYM(ry,rm);late=true;}else if(d<25){el.hidden=true;return;}
+ const st=readStat(ry,rm),V=Object.values(st),wAll=[4,10].includes(rm),wq=V.filter(x=>x.w&&x.s.wq&&x.s.wq!='h').map(x=>x.s.id);
+ const eT=V.filter(x=>x.eTodo).length,wT=V.filter(x=>x.wTodo).length,pT=V.filter(x=>x.phTodo).map(x=>x.s.id),phs=V.filter(x=>x.ph).map(x=>x.s.id);
+ if(late&&!eT&&!wT&&!pT.length){el.hidden=true;return;}
+ const is28=!late&&d==28,when=late?`上個月（${ry}/${rm}）的抄表還沒登記完`:is28?`今天 ${rm}/28 是抄表日`:d<28?`${rm}/28（再 ${28-d} 天）要抄水電錶`:`${rm}/28 已過，抄表要趕快登記`;
+ const water=wAll?'<b>全部攤位</b>都要抄（4、10 月）':wq.length?`<b>每季抄</b>的 ${wq.length} 攤：${wq.map(esc).join('、')}`:'這個月不用抄';
+ el.className='remind'+(is28?' hot':'');el.hidden=false;
+ el.innerHTML=`<div class="rm-t">📅 ${when}</div><div class="rm-b"><span>⚡ 電錶：全部攤位　<b>還沒登記 ${eT} 攤</b></span><span>💧 水錶：${water}${wAll||wq.length?`　<b>還沒登記 ${wT} 攤</b>`:''}</span>${phs.length?`<span>📷 電錶要拍照：${phs.map(esc).join('、')}${pT.length?`　<b>還沒拍 ${pT.length} 攤</b>`:'　✅ 都拍了'}</span>`:''}</div><button class="sm" id="rm-go">前往水電錶登記（${ry}/${rm} 讀數）</button>`;
+ $('#rm-go').onclick=()=>{[Y,M]=rm==12?[ry+1,1]:[ry,rm+1];$('#yy').value=Y;$('#mm').value=M;mtTodo=true;refresh();go('meter');};}
 const PAGES={ov,map,stall,pay,meter,jr,pl,ar,data,dep:()=>SJFDep.render({B,L,el:$('#p-dep'),save:saveLocal}),close:()=>SJFClose.render({D,Y,M,el:$('#p-close')}),prt:()=>SJFPrint.render({D,R,Y,M,el:$('#p-prt')})};
 function go(p){page=p;$$('nav a').forEach(a=>a.classList.toggle('on',a.dataset.p==p));$$('main section').forEach(s=>s.hidden=s.id!='p-'+p);
  $('#ttl').textContent=$('nav a[data-p='+p+']').textContent.slice(2).trim();$('#side').classList.remove('open');render(p);}
@@ -78,20 +96,20 @@ function map(){const Lo=P.layout,leg=mapMode=='pay'?Object.keys(COL).map(k=>`<sp
  $('#mq').oninput=e=>{const q=U(e.target.value.trim()).replace(/^A(\d{1,2})$/,(m,n)=>'A'+n.padStart(3,'0'));$$('#p-map .t').forEach(g=>{const o=byId[U(g.dataset.id)],hit=q&&(U(g.dataset.id)==q||(q.length>=2&&o&&U(o.name).includes(q)));g.querySelector('rect').setAttribute('stroke-width',hit?4:.8);g.querySelector('rect').setAttribute('stroke',hit?'#000':ZONE[P.layout.tiles.find(t=>t.id==g.dataset.id).z][1]);if(hit)g.scrollIntoView({block:'center',inline:'center',behavior:'smooth'});});};}
 function txt(s,t,big){const fs=Math.min(t.h*0.55,(t.w-2)/Math.max(String(s).length*0.62,1),big?12:9.5);return `<text x="${t.x+t.w/2}" y="${t.y+t.h/2+fs*0.36}" font-size="${fs.toFixed(1)}" text-anchor="middle" fill="#222">${esc(s)}</text>`;}
 // ── 攤位資料卡
-function meterHistHtml(id){const H=MarketCalc.meterHist(D,id);if(!H.rows.length)return `<h3>水電錶紀錄</h3><p class="muted">這個攤位沒有水電讀數。</p>`;
+function meterHistHtml(id){const H=MarketCalc.meterHist(D,id);if(!H.rows.length)return photoHtml(id)+`<h3>水電錶紀錄</h3><p class="muted">這個攤位沒有水電讀數。</p>`;
  const lab={e1:['電錶1','電費1'],e2:['電錶2','電費2'],w1:['水錶1','水費1'],w2:['水錶2','水費2']},one=k=>H.meters.filter(x=>x[0]==k[0]).length==1;
  const nm=k=>one(k)?lab[k][0].slice(0,2):lab[k][0],fn=k=>one(k)?lab[k][1].slice(0,2):lab[k][1];
  const head=['讀數月份'].concat(...H.meters.map(k=>[nm(k)+' 上月',nm(k)+' 本月',nm(k)+' 用量',fn(k)]),['異常']);
  const c=v=>`<td class="n">${v==null?'—':num(v)}</td>`,nA=H.rows.filter(r=>r.flags.length).length;
  const rows=H.rows.slice().reverse().map(r=>`<tr class="${r.flags.length?'anom':''}"><td>${r.y}/${r.m}</td>${H.meters.map(k=>{const o=r.v[k];return o?c(o.prev)+c(o.cur)+c(o.use)+c(o.fee):c()+c()+c()+c();}).join('')}<td class="fl">${r.flags.map(f=>`<b>${esc(f[0])}</b> ${esc(f[1])}`).join('<br>')}</td></tr>`);
- return `<h3>水電錶紀錄（${H.rows.length} 個月，<span style="color:#c0392b">${nA} 個月有異常</span>）</h3><p class="muted" style="margin-top:0">讀數月份 N 月的費用列在 N+1 月帳單；用量照原表算法（跳表少 1 度）。</p>${tbl(head,rows,'mh')}`;}
+ return photoHtml(id)+`<h3>水電錶紀錄（${H.rows.length} 個月，<span style="color:#c0392b">${nA} 個月有異常</span>）</h3><p class="muted" style="margin-top:0">讀數月份 N 月的費用列在 N+1 月帳單；用量照原表算法（跳表少 1 度）。</p>${tbl(head,rows,'mh')}`;}
 function card(id){const o=byId[U(id)];let h;const par=parentOf(id)||id,fam=[par].concat((KIDS[U(par)]||[]).map(k=>k.id)),tabs=fam.length>1?`<div class="tabs" style="margin:0 30px 10px 0">${fam.map(f=>`<button class="sm ${U(f)==U(id)?'on':''}" data-fam="${esc(f)}">${esc(f)}${byId[U(f)]?' '+LBL[status(byId[U(f)])]:''}</button>`).join('')}</div>`:'';
  if(!o){h=`<h2>${esc(id)}</h2><p class="muted">平面圖上有此攤號，但試算表「02攤位建檔資料庫」沒有這個攤位。</p><button id="newst">建立這個攤位</button>`;openM(tabs+h);bindFam();$('#newst').onclick=()=>editStall(null,id);return;}
  const s=status(o),r=o.rent,rd=o.read,q=(k,n)=>rd[k][0]||rd[k][1]?`<div><b>${n}</b>${rd[k][0]} → ${rd[k][1]}（${rd[k][2]} 度 × ${o.rate[k]}）</div>`:'';
  const hs=o.hist.slice().sort((a,b)=>(+b.y-+a.y)||(+b.m-+a.m)||String(b.d).localeCompare(a.d)).slice(0,24);
  h=`<h2 style="margin:0 30px 4px 0">${esc(o.id)} <span class="st" style="background:${COL[s]};color:#222">${LBL[s]}</span></h2><p class="muted" style="margin-top:0">${esc(o.name||'（無租客）')}${o.note?'・'+esc(o.note):''}・${ymTxt()}</p>
  <div class="grid2"><div><b>電話</b>${esc(o.tel||'—')}</div><div><b>車牌</b>${esc(o.cust&&o.cust.plate||'—')}</div><div><b>保證金</b>${o.cust&&o.cust.dep?fmt(o.cust.dep):'—'}</div><div><b>租金生效年月</b>${r.ym||'—'}${r.type?'（'+esc(r.type)+'）':''}</div>
- <div><b>月租</b>${fmt(r.mon)}</div><div><b>日租</b>${fmt(r.day)}</div><div><b>冰庫</b>${fmt(r.ice)}</div><div><b>停車</b>${fmt(r.park)}</div><div><b>清潔費</b>${fmt(r.clean)}</div><div><b>電費／水費</b>${fmt(o.elec)}／${fmt(o.water)}</div>
+ <div><b>月租</b>${fmt(r.mon)}</div><div><b>日租</b>${fmt(r.day)}</div><div><b>冰庫</b>${fmt(r.ice)}</div><div><b>停車</b>${fmt(r.park)}</div><div><b>清潔費</b>${fmt(r.clean)}</div><div><b>電費／水費</b>${fmt(o.elec)}${o.eDisc?`<small class="muted">（原 ${num(o.elecGross)}，折 ${num(o.eDisc)}）</small>`:''}／${fmt(o.water)}</div>
  <div><b>水電讀數月份</b>${o.pY.join('/')} → ${o.mY.join('/')}</div><div><b>合約</b>未登錄</div>${q('e1','電錶1')}${q('e2','電錶2')}${q('w1','水錶1')}${q('w2','水錶2')}</div>
  <div class="kpis" style="grid-template-columns:repeat(3,1fr);margin:12px 0"><div class="card kpi">本月應收<div class="v" style="font-size:18px">${fmt(o.due)}</div></div><div class="card kpi">本月已收<div class="v" style="font-size:18px">${fmt(o.paid)}</div></div><div class="card kpi">本月餘款<div class="v" style="font-size:18px">${fmt(o.bal)}</div></div></div>
  <div class="row"><button id="c-pay">登記繳費／銷帳</button><button id="c-ed" class="ghost">編輯攤位</button></div>
@@ -122,11 +140,13 @@ function stallOff(){const rows=offList().map(s=>`<tr><td>${esc(s.id)}</td><td>${
 function editStall(o,newId){const r=o?o.rent:{};const ymd=Y*100+M;const SS=(o&&D.stalls.find(x=>U(x.id)==U(o.id)))||{};
  openM(`<h2>${o?'編輯攤位 '+esc(o.id):'新增攤位'}</h2><div class="form">${F('e-id','攤位編號',o?o.id:newId)}${F('e-nm','租客姓名（空白＝空攤）',o?o.name:'')}${F('e-tel','電話',o?o.tel:'')}${F('e-note','備註',o?o.note:'')}</div>
  <h3>季節電價（選填，空白＝照水電錶那筆費率）</h3><div class="form">${F('e-es','夏季電費每度（讀數 6–9 月）',SS.eS||'','number')}${F('e-ew','冬季電費每度（讀數 10–5 月）',SS.eW||'','number')}${F('e-ef','自帳單年月起 yyyMM',SS.eFrom||ymd,'number')}</div>
+ <h3>抄表與電費折扣</h3><div class="form">${F('e-wq','水錶多久抄一次',MarketCalc.WQN[SS.wq||'h'],null,Object.values(MarketCalc.WQN))}${F('e-ph','電錶要拍照',SS.ph?'要':'不用',null,['不用','要'])}${F('e-ed','電費每月折扣（元，不到就全額折）',SS.eDisc||'','number')}${F('e-edf','折扣自帳單年月起 yyyMM',SS.eDiscFrom||ymd,'number')}</div>
  <h3>租金（新增一筆攤位更新）</h3><div class="form">${F('e-ym','年月範圍 yyyMM',r.ym&&r.ym>=ymd?r.ym:ymd,'number')}${F('e-type','日租/月租',r.type||'月租',null,['月租','日租'])}${F('e-day','攤位(日租)',r.day||0,'number')}${F('e-mon','攤位(月租)',r.mon||0,'number')}${F('e-ice','冰庫(月租)',r.ice||0,'number')}${F('e-park','停車位租金',r.park||0,'number')}${F('e-cl','清潔費',r.clean||0,'number')}</div>
  <label class="muted" style="font-size:13px"><input type="checkbox" id="e-rent" style="width:auto"> 同時儲存租金變更</label><div class="row" style="margin-top:10px"><button id="e-save">儲存到這台裝置</button></div>`);
  $('#e-save').onclick=async()=>{const id=V('e-id');if(!id)return alert('請填攤位編號');
-  if(o&&U(id)==U(o.id)){setStall(id,{name:V('e-nm'),tel:V('e-tel'),note:V('e-note'),eS:+V('e-es')||0,eW:+V('e-ew')||0,eFrom:+V('e-ef')||0});}
-  else{if(byId[U(id)])return alert('攤位編號已存在');(L.stallNew=L.stallNew||[]).push({id,name:V('e-nm'),tel:V('e-tel'),note:V('e-note'),eS:+V('e-es')||0,eW:+V('e-ew')||0,eFrom:+V('e-ef')||0});}
+  const X={wq:Object.keys(MarketCalc.WQN).find(k=>MarketCalc.WQN[k]==V('e-wq'))||'h',ph:V('e-ph')=='要'?1:0,eDisc:+V('e-ed')||0,eDiscFrom:+V('e-edf')||0};
+  if(o&&U(id)==U(o.id)){setStall(id,Object.assign({name:V('e-nm'),tel:V('e-tel'),note:V('e-note'),eS:+V('e-es')||0,eW:+V('e-ew')||0,eFrom:+V('e-ef')||0},X));}
+  else{if(byId[U(id)])return alert('攤位編號已存在');(L.stallNew=L.stallNew||[]).push(Object.assign({id,name:V('e-nm'),tel:V('e-tel'),note:V('e-note'),eS:+V('e-es')||0,eW:+V('e-ew')||0,eFrom:+V('e-ef')||0},X));}
   if($('#e-rent').checked||!o){(L.rent=(L.rent||[]).filter(x=>!(x[0]==+V('e-ym')&&U(x[1])==U(id)))).push([+V('e-ym'),id,V('e-nm'),V('e-type'),+V('e-day'),+V('e-mon'),+V('e-ice'),+V('e-park'),+V('e-cl')]);}
   $('#modal').hidden=true;await saveLocal();toast('已儲存（只存在這台裝置）');};}
 // ── 繳費登記
@@ -166,21 +186,25 @@ function pay(){const key=Y+'|'+M;let rows=D.pays.filter(p=>(pyAll||String(p.y)+'
  $$('#p-pay [data-del]').forEach(b=>b.onclick=async()=>{const k=b.dataset.del;if(!confirm(k[0]=='L'?'刪除這筆本機新增的繳費？':'這是原試算表的紀錄，刪除只會在這台裝置隱藏它（可在匯出／匯入頁還原）。確定？'))return;
   if(k[0]=='L')L.pay=L.pay.filter(p=>p.k!=k);else (L.payDel=L.payDel||[]).push(k);await saveLocal();});}
 // ── 水電錶登記
-let mtQ='',mtOnly=true;
+let mtQ='',mtOnly=true,mtTodo=false;
 function meter(){const [my,mm]=MarketCalc.prevYM(Y,M),[py,pm]=MarketCalc.prevYM(my,mm);
  const cur={},prev={};D.meters.forEach(r=>{const k=U(r[0]);if(r[1]==my&&r[2]==mm)cur[k]=r;if(r[1]==py&&r[2]==pm)prev[k]=r;});const lk=new Set((L.meter||[]).map(r=>U(r[0])+'|'+r[1]+'|'+r[2]));
- const list=D.stalls.filter(s=>!MarketCalc.isOff(s,Y,M)&&(!mtOnly||cur[U(s.id)]||prev[U(s.id)])&&(!mtQ||U(s.id+s.name).includes(U(mtQ))));
+ const RS=readStat(my,mm),todo=k=>RS[k]&&(RS[k].eTodo||RS[k].wTodo||RS[k].phTodo),VS=Object.values(RS);
+ const list=D.stalls.filter(s=>!MarketCalc.isOff(s,Y,M)&&(!mtOnly||cur[U(s.id)]||prev[U(s.id)])&&(!mtQ||U(s.id+s.name).includes(U(mtQ)))&&(!mtTodo||todo(U(s.id))));
  const rows=list.map(s=>{const k=U(s.id),c=cur[k]||[s.id,my,mm,0,8,0,8,0,8,0,8,''],p=prev[k]||[0,0,0,0,0,0,0,0,0,0,0,0];
-  const dl=(i)=>MarketCalc.delta(+p[i]||0,+c[i]||0);return `<tr class="${lk.has(k+'|'+my+'|'+mm)?'loc':''}" data-id="${esc(s.id)}"><td>${esc(s.id)}</td><td>${esc(s.name)}</td>
+  const dl=(i)=>MarketCalc.delta(+p[i]||0,+c[i]||0);const x=RS[k]||{},pk=k+'|'+my+'|'+mm,hp=(L.photo||{})[pk]||PQ.has(pk);const tg=(x.eTodo?'<i class="tg e">待抄電</i>':'')+(x.wTodo?'<i class="tg w">待抄水</i>':x.w?'<i class="tg w0">本月抄水</i>':'')+(x.ph?(hp?'<i class="tg p0">📷已拍</i>':'<i class="tg p">📷要拍照</i>'):'');
+  return `<tr class="${lk.has(pk)?'loc':''}${x.eTodo||x.wTodo||x.phTodo?' todo':''}" data-id="${esc(s.id)}"><td>${esc(s.id)}${tg?'<br>'+tg:''}</td><td>${esc(s.name)}</td>
   <td class="n">${num(p[3])}</td><td><input data-i="3" value="${c[3]}"></td><td class="n d3">${dl(3)}</td><td><input data-i="4" value="${c[4]}"></td>
   <td class="n">${num(p[5])}</td><td><input data-i="5" value="${c[5]}"></td><td class="n d5">${dl(5)}</td><td><input data-i="6" value="${c[6]}"></td>
   <td class="n">${num(p[7])}</td><td><input data-i="7" value="${c[7]}"></td><td class="n d7">${dl(7)}</td><td><input data-i="8" value="${c[8]}"></td>
-  <td class="n">${num(p[9])}</td><td><input data-i="9" value="${c[9]}"></td><td class="n d9">${dl(9)}</td><td><input data-i="10" value="${c[10]}"></td><td><button class="sm" data-sv>存</button></td></tr>`;});
- $('#p-meter').innerHTML=`<div class="card"><p>帳單 ${ymTxt()} 用的是 <b>${py}/${pm} → ${my}/${mm}</b> 的讀數差（水電晚一個月），費率取 ${my}/${mm} 那筆。這頁輸入的是 <b>${my} 年 ${mm} 月</b> 的讀數。</p>
- <div class="row"><input id="mtq" placeholder="攤位／姓名" value="${esc(mtQ)}"><label class="muted"><input type="checkbox" id="mtonly" style="width:auto" ${mtOnly?'checked':''}> 只顯示有抄表的攤位</label><button id="mtall">整批存入</button><button class="ghost" id="mtcsv">匯出 CSV</button><span class="muted">${rows.length} 攤</span></div>
+  <td class="n">${num(p[9])}</td><td><input data-i="9" value="${c[9]}"></td><td class="n d9">${dl(9)}</td><td><input data-i="10" value="${c[10]}"></td><td style="white-space:nowrap"><button class="sm" data-sv>存</button>${x.ph||s.ph?` <label class="sm btn ph" title="拍電錶照片（自動加拍照日期）">📷<input type="file" accept="image/*" capture="environment" data-ph hidden></label>`:''}</td></tr>`;});
+ $('#p-meter').innerHTML=`<div class="card"><p>帳單 ${ymTxt()} 用的是 <b>${py}/${pm} → ${my}/${mm}</b> 的讀數差（水電晚一個月），費率取 ${my}/${mm} 那筆。這頁輸入的是 <b>${my} 年 ${mm} 月</b> 的讀數（${mm}/28 抄表）。</p>
+ <p class="mtsum">⚡ 電錶全部抄，還沒登記 <b>${VS.filter(v=>v.eTodo).length}</b> 攤　💧 水錶 ${[4,10].includes(mm)?'全部抄':VS.some(v=>v.w)?'每季攤位抄':'本月不用抄'}，還沒登記 <b>${VS.filter(v=>v.wTodo).length}</b> 攤　📷 還沒拍照 <b>${VS.filter(v=>v.phTodo).length}</b> 攤　<span class="muted">（黃底＝還沒抄；「還沒登記」＝本月讀數跟上月一模一樣或沒有讀數）</span></p>
+ <div class="row"><input id="mtq" placeholder="攤位／姓名" value="${esc(mtQ)}"><label class="muted"><input type="checkbox" id="mtonly" style="width:auto" ${mtOnly?'checked':''}> 只顯示有抄表的攤位</label><label class="muted"><input type="checkbox" id="mttodo" style="width:auto" ${mtTodo?'checked':''}> 只顯示還沒抄／還沒拍照的</label><button id="mtall">整批存入</button><button class="ghost" id="mtcsv">匯出 CSV</button><span class="muted">${rows.length} 攤</span></div>
  ${tbl(['攤位','租客','電1上月','電1本月','度數','電1費率','電2上月','電2本月','度數','電2費率','水1上月','水1本月','度數','水1費率','水2上月','水2本月','度數','水2費率',''],rows)}
  <p class="muted" style="font-size:12px">度數照原表：本月−上月；若為負（跳表）＝基數−1−上月＋本月（基數依上月讀數位數 100/1000/10000/100000，少算 1 度照抄）。儲存會取代該攤該月的讀數（原表同攤同月多列會相加）。</p></div>`;
- $('#mtq').onchange=e=>{mtQ=e.target.value;meter();};$('#mtonly').onchange=e=>{mtOnly=e.target.checked;meter();};$('#mtcsv').onclick=()=>csv('水電錶登記',meterSheet());
+ $('#mtq').onchange=e=>{if(e.target.value===mtQ)return;mtQ=e.target.value;meter();};$('#mtonly').onchange=e=>{mtOnly=e.target.checked;meter();};$('#mttodo').onchange=e=>{mtTodo=e.target.checked;meter();};
+ $$('#p-meter [data-ph]').forEach(inp=>inp.onchange=()=>{const tr=inp.closest('tr');if(inp.files[0])takePhoto(tr.dataset.id,my,mm,inp.files[0],tr);inp.value='';});$('#mtcsv').onclick=()=>csv('水電錶登記',meterSheet());
  $('#mtall').onclick=async()=>{const ch=[],warn=[],nm=['電1','電2','水1','水2'];
   $$('#p-meter tr[data-id]').forEach(tr=>{const id=tr.dataset.id,k=U(id),c=cur[k],p=prev[k]||[];const row=[id,my,mm];for(let i=3;i<=10;i++)row.push(+tr.querySelector(`[data-i="${i}"]`).value||0);row.push(c?c[11]:'');
    const old=c||[id,my,mm,0,8,0,8,0,8,0,8];if(![3,4,5,6,7,8,9,10].some(i=>+old[i]!=row[i]))return;ch.push(row);
@@ -191,6 +215,32 @@ function meter(){const [my,mm]=MarketCalc.prevYM(Y,M),[py,pm]=MarketCalc.prevYM(
  $$('#p-meter tr[data-id]').forEach(tr=>{const id=tr.dataset.id,p=prev[U(id)]||[];tr.oninput=()=>{[3,5,7,9].forEach(i=>tr.querySelector('.d'+i).textContent=MarketCalc.delta(+p[i]||0,+tr.querySelector(`[data-i="${i}"]`).value||0));};
   tr.querySelector('[data-sv]').onclick=async()=>{const c=cur[U(id)];const row=[id,my,mm];for(let i=3;i<=10;i++)row.push(+tr.querySelector(`[data-i="${i}"]`).value||0);row.push(c?c[11]:'');
    L.meter=(L.meter||[]).filter(r=>!(U(r[0])==U(id)&&r[1]==my&&r[2]==mm));L.meter.push(row);await saveLocal();toast(id+(syncUrl()?' 讀數已存':' 讀數已存（只存在這台裝置）'));};});}
+// ── 電錶照片：拍照→加日期浮水印→加密→排隊（IndexedDB）→有設定雲端同步就上傳到 Google 雲端硬碟，參照存在 L.photo["攤位|年|月"]
+const PQ=new Map();const PH=window.SJFPhoto;
+async function loadPQ(){try{PQ.clear();(await PH.qAll()||[]).forEach(it=>PQ.set(it.pk,it));}catch(e){}}
+async function takePhoto(id,my,mm,file,tr){if(!PH||!SK)return;toast('照片處理中…');
+ try{const g=i=>tr?+tr.querySelector(`[data-i="${i}"]`).value||0:0,lines=[`${id}　${my}/${mm} 讀數`];const e1=g(3),e2=g(5);lines.push('電錶1：'+e1+(e2?'　電錶2：'+e2:''));
+  const r=await PH.stamp(file,lines);const en=await PH.enc(SK.key,r.blob);const pk=U(id)+'|'+my+'|'+mm,ts=PH.fmtDT(r.taken).replace(/\D/g,'');
+  const it={k:pk+'|'+Date.now(),pk,id,y:my,m:mm,name:`${id}_${my}${String(mm).padStart(2,'0')}_${ts}`,iv:en.iv,ct:en.ct,t:r.taken.toISOString(),ex:r.exif,r:[e1,e2]};
+  await PH.qPut(it);PQ.set(pk,it);const u=URL.createObjectURL(r.blob);
+  openM(`<h2>${esc(id)} 電錶照片</h2><p class="muted">拍照時間 ${PH.fmtDT(r.taken)}${r.exif?'（照片內建時間）':'（照片沒有拍攝時間，用上傳時間）'}・${r.w}×${r.h}・${Math.round(r.blob.size/1024)} KB</p><img src="${u}" style="max-width:100%">
+  <p id="phst" class="muted">${syncUrl()?'上傳到雲端中…':'⚠️ 還沒設定雲端同步：照片先加密存在這台裝置，設定好同步後會自動上傳。'}</p>`);
+  setTimeout(()=>{if(!syncUrl()&&page=='meter')meter();flushPhotos();},300);}catch(e){console.error(e);alert('照片處理失敗：'+(e.message||e));}}
+let phBusy=false;
+async function flushPhotos(){if(!PH||!SE||!syncUrl()||phBusy||!PQ.size)return;phBusy=true;
+ try{const n=await PH.flush(SE.call,async(it,fid)=>{(L.photo=L.photo||{})[it.pk]={f:fid,t:it.t,r:it.r,ex:it.ex?1:0,n:it.name};PQ.delete(it.pk);});
+  if(n){const e=$('#phst');if(e)e.textContent='✅ 已上傳到雲端';await saveLocal();toast(`已上傳 ${n} 張電錶照片到雲端`);}}
+ catch(e){const m=String(e.message||e);const el=$('#phst');if(el)el.textContent='⚠️ 上傳失敗，稍後自動重試：'+(m=='unknown action'?'Apps Script 還是舊版，請照設定說明更新部署（新版本）':m);}
+ finally{phBusy=false;}}
+async function showPhoto(pk){const it=PQ.get(pk),ref=(L.photo||{})[pk];let blob;
+ try{if(it)blob=await PH.dec(SK.key,it);else if(ref){if(!syncUrl())return alert('要先設定雲端同步才看得到雲端上的照片');toast('從雲端下載照片…');const r=await SE.call({a:'photoGet',id:ref.f});if(!r.ok)throw new Error(r.error);blob=await PH.dec(SK.key,r);}
+  else return;}catch(e){return alert('照片打不開：'+(e.message||e));}
+ const [id,y,m]=pk.split('|'),t=it?it.t:ref.t;openM(`<h2>${esc(id)} ${y}/${m} 電錶照片</h2><p class="muted">拍照時間 ${PH.fmtDT(new Date(t))}</p><img src="${URL.createObjectURL(blob)}" style="max-width:100%"><p><button class="sm ghost" id="phback">← 回 ${esc(id)} 資料卡</button></p>`);$('#phback').onclick=()=>card(id);}
+function photoHtml(id){const k=U(id)+'|',ks=new Set([...Object.keys(L.photo||{}),...PQ.keys()].filter(x=>x.startsWith(k)));if(!ks.size)return '';
+ const rows=[...ks].sort((a,b)=>{const [,ay,am]=a.split('|'),[,by,bm]=b.split('|');return (by*100+ +bm)-(ay*100+ +am);}).map(pk=>{const [,y,m]=pk.split('|'),it=PQ.get(pk),r=it||(L.photo||{})[pk];
+  return `<tr><td>${y}/${m}</td><td>${PH.fmtDT(new Date(r.t))}</td><td class="n">${(r.r||[]).filter(Boolean).join(' / ')}</td><td>${it?'🕒 待上傳（存在這台）':'☁️ 雲端'}</td><td><button class="sm" data-pv="${esc(pk)}">看照片</button></td></tr>`;});
+ return `<h3>電錶照片（${rows.length}）</h3>${tbl(['讀數月份','拍照時間','電錶讀數','存放',''],rows)}`;}
+$('#mbody').addEventListener('click',e=>{const b=e.target.closest('[data-pv]');if(b)showPhoto(b.dataset.pv);});
 // ── 日帳流水帳
 function jrYM(){return (Y+1911)+'年'+String(M).padStart(2,'0')+'月';}
 function jr(){const J=MarketCalc.journal(D).filter(j=>j.ym==jrYM());const sum=k=>J.filter(j=>j.pl==k).reduce((a,j)=>a+j.signed,0);const cats=Object.keys(B.lk.cat).filter(c=>c!='流水帳類別');

@@ -37,3 +37,16 @@ table input{width:84px;padding:4px 6px;font-size:14px}.loc{background:#fff8e6}th
 @media(max-width:800px){header{flex-wrap:wrap}header h1{font-size:19px}.ymsel{font-size:12px}}
 
 table.mh tr.anom td{background:#fde8e6}table.mh td.fl{font-size:12px;color:#a93226;min-width:180px;white-space:normal}table.mh td{white-space:nowrap}
+/* 抄表提醒 */
+#remind{margin:0 0 12px;padding:12px 16px;border-radius:12px;background:#fff6d6;border:2px solid #f0c040;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+#remind[hidden]{display:none}
+#remind.hot{background:#ffe3d6;border-color:#e8633a;animation:rmPulse 1.6s ease-in-out infinite}
+@keyframes rmPulse{50%{box-shadow:0 0 0 6px rgba(232,99,58,.25)}}
+#remind .rm-t{font-size:18px;font-weight:700;width:100%}
+#remind .rm-b{display:flex;flex-direction:column;gap:4px;flex:1;min-width:260px}
+#remind button{background:#e8633a;color:#fff;border:0}
+.mtsum{background:#fff6d6;border-radius:8px;padding:8px 10px}
+.tbl tr.todo td{background:#fff3c4}
+i.tg{font-style:normal;font-size:11px;border-radius:6px;padding:1px 5px;margin-right:3px;white-space:nowrap}
+i.tg.e{background:#f6bd72}i.tg.w{background:#9cc9f0}i.tg.w0{background:#dbeaf7}i.tg.p{background:#ec8a86;color:#fff}i.tg.p0{background:#bfe3c6}
+label.btn.ph{display:inline-block;border:1px solid var(--line);border-radius:8px;padding:4px 8px;cursor:pointer;background:#fff}

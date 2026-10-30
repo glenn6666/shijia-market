@@ -24,6 +24,11 @@ function meterMap(D,y,m){const M={};D.meters.forEach(r=>{if(r[1]==y&&r[2]==m){co
 // 季節電價：攤位 eS(夏)/eW(冬) 每度單價，eFrom＝自哪個帳單年月(yyyMM)起生效；季節依「水電讀數月份」判斷（與費率取水電本月一致），夏季＝讀數 6–9 月
 function isSummer(mm){return mm>=6&&mm<=9;}
 function seasonRate(s,y,m,mm){if(!s||!(+s.eS||+s.eW))return null;if(s.eFrom&&y*100+m<+s.eFrom)return null;const v=isSummer(mm)?+s.eS:+s.eW;return v>0?v:null;}
+// 電費每月折扣：攤位 eDisc 元／月，eDiscFrom＝自帳單年月(yyyMM)起；電費不到折扣額就全額折抵（不會變負數）
+function eDisc(s,y,m,elec){if(!s||!(+s.eDisc>0))return 0;if(s.eDiscFrom&&y*100+m<+s.eDiscFrom)return 0;return Math.max(0,Math.min(+s.eDisc,elec));}
+// 抄表排程：電錶每月 28 號全部抄；水錶 wq：'h'＝每年 4、10 月（預設），'q'＝每季 1、4、7、10 月，'m'＝每月
+const WQ={h:[4,10],q:[1,4,7,10],m:[1,2,3,4,5,6,7,8,9,10,11,12]},WQN={h:'半年（4、10 月）',q:'每季（1、4、7、10 月）',m:'每月'};
+function waterDue(s,mm){return (WQ[(s&&s.wq)||'h']||WQ.h).includes(+mm);}
 function isOff(s,y,m){return !!(s&&s.off&&+s.off<=y*100+m);}
 function compute(D,y,m){y=y||D.ym[0];m=m||D.ym[1];
   const [my,mm]=prevYM(y,m),[py,pm]=prevYM(my,mm);// 水電本月=帳單上月，水電上月=帳單上上月；費率取水電本月
@@ -32,11 +37,11 @@ function compute(D,y,m){y=y||D.ym[0];m=m||D.ym[1];
   D.pays.forEach(p=>{const st=U(p.st);(hist[st]=hist[st]||[]).push(p);if(String(p.y)+'|'+String(p.m)===pk){const k=st+'|'+U(p.nm);paid[k]=(paid[k]||0)+(+p.amt||0);}});
   return D.stalls.filter(s=>!isOff(s,y,m)).map(s=>{const id=U(s.id),r=RT[id]||{day:0,mon:0,ice:0,park:0,clean:0},a=A[id]||Z,b=Bm[id]||Z;
     const e1=delta(a[0],b[0]),e2=delta(a[2],b[2]),w1=delta(a[4],b[4]),w2=delta(a[6],b[6]),R={e1:b[1],e2:b[3],w1:b[5],w2:b[7]};const sr=seasonRate(s,y,m,mm);if(sr!=null){if(e1||b[1])R.e1=sr;if(e2||b[3])R.e2=sr;}
-    const o={id:s.id,name:s.name,tel:s.tel,note:s.note,rent:r,read:{e1:[a[0],b[0],e1],e2:[a[2],b[2],e2],w1:[a[4],b[4],w1],w2:[a[6],b[6],w2]},rate:R,
-      elec:xround(R.e1*e1+R.e2*e2),water:xround(R.w1*w1+R.w2*w2),hist:hist[id]||[],mY:[my,mm],pY:[py,pm]};
-    o.paid=paid[id+'|'+U(s.name)]||0;
+    const o={st:s,id:s.id,name:s.name,tel:s.tel,note:s.note,rent:r,read:{e1:[a[0],b[0],e1],e2:[a[2],b[2],e2],w1:[a[4],b[4],w1],w2:[a[6],b[6],w2]},rate:R,
+      elecGross:xround(R.e1*e1+R.e2*e2),sr:sr,water:xround(R.w1*w1+R.w2*w2),hist:hist[id]||[],mY:[my,mm],pY:[py,pm]};
+    o.eDisc=eDisc(s,y,m,o.elecGross);o.elec=o.elecGross-o.eDisc;o.paid=paid[id+'|'+U(s.name)]||0;
     if(!s.name){o.due=null;o.bal=null;o.ar=false;return o;}
-    o.due=xround(r.mon+r.ice+r.park+r.clean+R.e1*e1+R.e2*e2+R.w1*w1+R.w2*w2+r.day);o.bal=o.due-o.paid;o.ar=o.due!==0;return o;});}
+    o.due=xround(r.mon+r.ice+r.park+r.clean+R.e1*e1+R.e2*e2+R.w1*w1+R.w2*w2+r.day)-o.eDisc;o.bal=o.due-o.paid;o.ar=o.due!==0;return o;});}
 // 日帳流水帳：D 損益項目、I 年月、K 金額計算
 function journal(D){const cat=D.lk.cat||{};return D.jr.map(j=>{const pl=j.j==='1'?'收入':j.j==='2'?'支出':(cat[j.cat]||'');const ds=String(j.date||'');
   return Object.assign({},j,{pl:pl,ym:ds?ds.slice(0,4)+'年'+ds.slice(4,6)+'月':'',signed:/支出$/.test(pl)?-(+j.amt||0):(+j.amt||0)});});}
@@ -74,5 +79,5 @@ function meterHist(D,id,yms){const k=U(id);yms=yms||allYM(D);const by={},cnt={};
       if(md>0&&o.use>3*md&&o.use-md>=20&&!r.flags.some(f=>(f[0]=='倒退'||f[0]=='跳表')&&f[1].startsWith(nm)))r.flags.push(['暴增',nm+' 用量 '+o.use+' 度，是中位數 '+md+' 的 '+(o.use/md).toFixed(1)+' 倍']);
       const isW=key[0]=='w';if(o.use===0&&o.cur>0&&us.length&&us.filter(x=>x>0).length>=us.length/2&&billed(r.ym)){z++;if(!isW||z==3)r.flags.push(['零用量',nm+(isW?' 連續 3 個月':'')+' 用量 0 但本攤有計租']);}else z=0;});});
   return {rows,meters:used.map(m=>m[0]),names:used.map(m=>m[1])};}
-g.MarketCalc={isOff,isSummer,seasonRate,compute,merge,journal,pnl,xround,delta,prevYM,meterHist,allYM};
+g.MarketCalc={isOff,eDisc,waterDue,WQ,WQN,isSummer,seasonRate,compute,merge,journal,pnl,xround,delta,prevYM,meterHist,allYM};
 })(typeof window!=='undefined'?window:globalThis);

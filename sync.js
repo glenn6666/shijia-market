@@ -2,7 +2,7 @@
 // 雲端只收到 AES-GCM 加密後的整包（iv/ct），明文只存在瀏覽器裡。
 (function(g){
 const U=s=>String(s||'').toUpperCase(),SEP='\u0001';
-const SPEC={pay:['a',p=>p.k],payDel:['s'],meter:['a',r=>U(r[0])+'|'+r[1]+'|'+r[2]],jr:['a',j=>j.k],jrDel:['s'],rent:['a',r=>r[0]+'|'+U(r[1])],stall:['o'],stallNew:['a',s=>U(s.id)],dep:['o']};
+const SPEC={pay:['a',p=>p.k],payDel:['s'],meter:['a',r=>U(r[0])+'|'+r[1]+'|'+r[2]],jr:['a',j=>j.k],jrDel:['s'],rent:['a',r=>r[0]+'|'+U(r[1])],stall:['o'],stallNew:['a',s=>U(s.id)],dep:['o'],photo:['o']};
 function toMap(L){const m={};for(const c in SPEC){const[t,f]=SPEC[c],v=L&&L[c];if(!v)continue;
  if(t=='a')v.forEach(x=>m[c+SEP+f(x)]=x);else if(t=='s')v.forEach(x=>m[c+SEP+x]=1);else for(const k in v)m[c+SEP+k]=v[k];}return m;}
 function fromMap(m,ts){const L={},keys=Object.keys(m).sort((a,b)=>(ts[a]||0)-(ts[b]||0));

@@ -17,14 +17,16 @@ function values(D,o,Y,M,fmt){const id=U(o.id),[my,mm]=prevYM(Y,M),[py,pm]=prevYM
   const a=sumMeter(D,id,py,pm),b=sumMeter(D,id,my,mm);// a=上月讀數與費率（原表費率取上月那筆），b=本月讀數
   const e1=delta(a[0],b[0]),e2=delta(a[2],b[2]),w1=delta(a[4],b[4]),w2=delta(a[6],b[6]);
   const r=o.rent||{},has=r.ym!=null&&r.ym<=Y*100+M,paid=paidNoDep(D,id,Y,M);
-  const elec=e1*a[1]+e2*a[3],water=w2*a[7]+w1*a[5];
+  let elec=o.sr!=null?(e1+e2)*o.sr:e1*a[1]+e2*a[3];const water=w2*a[7]+w1*a[5];
+  // 電費每月折扣（calc.js eDisc）：不到折扣額全額折抵；三聯單電費格印折後金額並註明，A4 繳費單另列一行「電費折扣」
+  const ed=(o.st&&g.MarketCalc)?g.MarketCalc.eDisc(o.st,Y,M,xr(elec)):0;if(ed)elec=xr(elec)-ed;
   if(fmt=='tri'){const rent=has?(r.type=='月租'?+r.mon||0:+r.day||0):0;const v={D5:has?r.name:0,H5:o.id,B6:M,E6:rent,I6:a[0],I7:b[0],I8:e1,B9:M,E9:has?+r.clean||0:0,I9:a[2],I10:b[2],I12:e2,
       B13:mm,E13:elec,I13:a[4],I14:b[4],I15:w1,B16:mm,E16:w2*a[7]+w1*a[5],I16:a[6],I17:b[6],I18:w2,B19:M,E19:has?+r.ice||0:0,I20:paid,B21:M,E21:has?+r.park||0:0};
-    v.D25=v.E6+v.E9+v.E13+v.E16+v.E19+v.E21-paid;return v;}
+    v.D25=v.E6+v.E9+v.E13+v.E16+v.E19+v.E21-paid;if(ed)v.E13=xr(elec)+'(折'+ed+')';return v;}
   const mon=has?+r.mon||0:0,cl=has?+r.clean||0:0,ice=has?+r.ice||0:0,pk=has?+r.park||0:0,other=0,prevOwe=0;// 待繳應付登記在原表全是文字，SUMIFS 恆為 0
-  const due=xr(mon+cl+elec+water+ice+pk+other);const v={};
-  [0,20,40].forEach(k=>{const A=(c,r)=>c+(r+k);Object.assign(v,{[A('B',4)]:`${Y}年${M}月繳費單`,[A('D',5)]:o.name||'',[A('G',5)]:o.id,[A('D',6)]:mon,[A('D',7)]:cl,[A('D',9)]:elec,[A('D',10)]:water,[A('D',11)]:w1*a[5],
-    [A('D',12)]:ice,[A('D',13)]:pk,[A('D',15)]:other,[A('H',6)]:a[0],[A('H',7)]:b[0],[A('H',8)]:e1,[A('H',9)]:a[2],[A('H',10)]:b[2],[A('H',11)]:e2,[A('H',12)]:a[4],[A('H',13)]:b[4],[A('H',14)]:w1,
+  const due=xr(mon+cl+elec+water+ice+pk+other);const eg=xr(elec)+ed;const v={};
+  [0,20,40].forEach(k=>{const A=(c,r)=>c+(r+k);Object.assign(v,{[A('B',4)]:`${Y}年${M}月繳費單`,[A('D',5)]:o.name||'',[A('G',5)]:o.id,[A('D',6)]:mon,[A('D',7)]:cl,[A('D',9)]:ed?eg:elec,[A('D',10)]:water,[A('D',11)]:w1*a[5],
+    [A('D',12)]:ice,[A('D',13)]:pk,[A('D',15)]:ed?-ed:other,...(ed?{[A('B',15)]:'電費折扣'}:{}),[A('H',6)]:a[0],[A('H',7)]:b[0],[A('H',8)]:e1,[A('H',9)]:a[2],[A('H',10)]:b[2],[A('H',11)]:e2,[A('H',12)]:a[4],[A('H',13)]:b[4],[A('H',14)]:w1,
     [A('H',15)]:a[6],[A('H',16)]:b[6],[A('H',17)]:w2,[A('H',18)]:prevOwe,[A('H',19)]:due,[A('H',20)]:paid,[A('H',21)]:prevOwe+due-paid});});
   return v;}
 // Excel 數字格式（只實作這兩張表用到的）
