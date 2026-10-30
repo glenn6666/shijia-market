@@ -119,13 +119,14 @@ async function rmStall(id){const o=byId[U(id)]||{};const ymk=Y*100+M;
 function stallOff(){const rows=offList().map(s=>`<tr><td>${esc(s.id)}</td><td>${esc(s.name)}</td><td>${Math.floor(s.off/100)}/${s.off%100}</td><td>${esc(s.offAt||'')}</td><td><button class="sm" data-rs="${esc(s.id)}">復原</button></td></tr>`);
  $('#p-stall').innerHTML=`<div class="card"><div class="row"><button class="ghost" id="stback">← 回攤位建檔</button><span class="muted">已移除 ${rows.length} 攤</span></div>${rows.length?tbl(['攤位','租客','自帳單年月起移除','移除日期',''],rows):'<p class="muted">目前沒有已移除的攤位。</p>'}</div><p class="muted" style="font-size:12px">已移除的攤位在「自帳單年月」之前的月份照常計算與列印；復原後立即恢復出帳。</p>`;
  $('#stback').onclick=()=>{stOff=false;stall();};$$('#p-stall [data-rs]').forEach(b=>b.onclick=async()=>{if(!confirm('復原攤位 '+b.dataset.rs+'？'))return;setStall(b.dataset.rs,{off:0,offAt:''});await saveLocal();toast('已復原 '+b.dataset.rs);});}
-function editStall(o,newId){const r=o?o.rent:{};const ymd=Y*100+M;
+function editStall(o,newId){const r=o?o.rent:{};const ymd=Y*100+M;const SS=(o&&D.stalls.find(x=>U(x.id)==U(o.id)))||{};
  openM(`<h2>${o?'編輯攤位 '+esc(o.id):'新增攤位'}</h2><div class="form">${F('e-id','攤位編號',o?o.id:newId)}${F('e-nm','租客姓名（空白＝空攤）',o?o.name:'')}${F('e-tel','電話',o?o.tel:'')}${F('e-note','備註',o?o.note:'')}</div>
+ <h3>季節電價（選填，空白＝照水電錶那筆費率）</h3><div class="form">${F('e-es','夏季電費每度（讀數 6–9 月）',SS.eS||'','number')}${F('e-ew','冬季電費每度（讀數 10–5 月）',SS.eW||'','number')}${F('e-ef','自帳單年月起 yyyMM',SS.eFrom||ymd,'number')}</div>
  <h3>租金（新增一筆攤位更新）</h3><div class="form">${F('e-ym','年月範圍 yyyMM',r.ym&&r.ym>=ymd?r.ym:ymd,'number')}${F('e-type','日租/月租',r.type||'月租',null,['月租','日租'])}${F('e-day','攤位(日租)',r.day||0,'number')}${F('e-mon','攤位(月租)',r.mon||0,'number')}${F('e-ice','冰庫(月租)',r.ice||0,'number')}${F('e-park','停車位租金',r.park||0,'number')}${F('e-cl','清潔費',r.clean||0,'number')}</div>
  <label class="muted" style="font-size:13px"><input type="checkbox" id="e-rent" style="width:auto"> 同時儲存租金變更</label><div class="row" style="margin-top:10px"><button id="e-save">儲存到這台裝置</button></div>`);
  $('#e-save').onclick=async()=>{const id=V('e-id');if(!id)return alert('請填攤位編號');
-  if(o&&U(id)==U(o.id)){setStall(id,{name:V('e-nm'),tel:V('e-tel'),note:V('e-note')});}
-  else{if(byId[U(id)])return alert('攤位編號已存在');(L.stallNew=L.stallNew||[]).push({id,name:V('e-nm'),tel:V('e-tel'),note:V('e-note')});}
+  if(o&&U(id)==U(o.id)){setStall(id,{name:V('e-nm'),tel:V('e-tel'),note:V('e-note'),eS:+V('e-es')||0,eW:+V('e-ew')||0,eFrom:+V('e-ef')||0});}
+  else{if(byId[U(id)])return alert('攤位編號已存在');(L.stallNew=L.stallNew||[]).push({id,name:V('e-nm'),tel:V('e-tel'),note:V('e-note'),eS:+V('e-es')||0,eW:+V('e-ew')||0,eFrom:+V('e-ef')||0});}
   if($('#e-rent').checked||!o){(L.rent=(L.rent||[]).filter(x=>!(x[0]==+V('e-ym')&&U(x[1])==U(id)))).push([+V('e-ym'),id,V('e-nm'),V('e-type'),+V('e-day'),+V('e-mon'),+V('e-ice'),+V('e-park'),+V('e-cl')]);}
   $('#modal').hidden=true;await saveLocal();toast('已儲存（只存在這台裝置）');};}
 // ── 繳費登記
@@ -176,10 +177,17 @@ function meter(){const [my,mm]=MarketCalc.prevYM(Y,M),[py,pm]=MarketCalc.prevYM(
   <td class="n">${num(p[7])}</td><td><input data-i="7" value="${c[7]}"></td><td class="n d7">${dl(7)}</td><td><input data-i="8" value="${c[8]}"></td>
   <td class="n">${num(p[9])}</td><td><input data-i="9" value="${c[9]}"></td><td class="n d9">${dl(9)}</td><td><input data-i="10" value="${c[10]}"></td><td><button class="sm" data-sv>存</button></td></tr>`;});
  $('#p-meter').innerHTML=`<div class="card"><p>帳單 ${ymTxt()} 用的是 <b>${py}/${pm} → ${my}/${mm}</b> 的讀數差（水電晚一個月），費率取 ${my}/${mm} 那筆。這頁輸入的是 <b>${my} 年 ${mm} 月</b> 的讀數。</p>
- <div class="row"><input id="mtq" placeholder="攤位／姓名" value="${esc(mtQ)}"><label class="muted"><input type="checkbox" id="mtonly" style="width:auto" ${mtOnly?'checked':''}> 只顯示有抄表的攤位</label><button class="ghost" id="mtcsv">匯出 CSV</button><span class="muted">${rows.length} 攤</span></div>
+ <div class="row"><input id="mtq" placeholder="攤位／姓名" value="${esc(mtQ)}"><label class="muted"><input type="checkbox" id="mtonly" style="width:auto" ${mtOnly?'checked':''}> 只顯示有抄表的攤位</label><button id="mtall">整批存入</button><button class="ghost" id="mtcsv">匯出 CSV</button><span class="muted">${rows.length} 攤</span></div>
  ${tbl(['攤位','租客','電1上月','電1本月','度數','電1費率','電2上月','電2本月','度數','電2費率','水1上月','水1本月','度數','水1費率','水2上月','水2本月','度數','水2費率',''],rows)}
  <p class="muted" style="font-size:12px">度數照原表：本月−上月；若為負（跳表）＝基數−1−上月＋本月（基數依上月讀數位數 100/1000/10000/100000，少算 1 度照抄）。儲存會取代該攤該月的讀數（原表同攤同月多列會相加）。</p></div>`;
  $('#mtq').onchange=e=>{mtQ=e.target.value;meter();};$('#mtonly').onchange=e=>{mtOnly=e.target.checked;meter();};$('#mtcsv').onclick=()=>csv('水電錶登記',meterSheet());
+ $('#mtall').onclick=async()=>{const ch=[],warn=[],nm=['電1','電2','水1','水2'];
+  $$('#p-meter tr[data-id]').forEach(tr=>{const id=tr.dataset.id,k=U(id),c=cur[k],p=prev[k]||[];const row=[id,my,mm];for(let i=3;i<=10;i++)row.push(+tr.querySelector(`[data-i="${i}"]`).value||0);row.push(c?c[11]:'');
+   const old=c||[id,my,mm,0,8,0,8,0,8,0,8];if(![3,4,5,6,7,8,9,10].some(i=>+old[i]!=row[i]))return;ch.push(row);
+   [3,5,7,9].forEach((i,j)=>{const pv=+p[i]||0,cv=row[i];if(cv&&cv<pv)warn.push(`${id} ${nm[j]} 倒退 ${pv}→${cv}（會當跳表算 ${MarketCalc.delta(pv,cv)} 度）`);else if(!cv&&pv)warn.push(`${id} ${nm[j]} 本月 0（上月 ${pv}）`);});});
+  if(!ch.length)return toast('沒有修改的讀數');
+  if(!confirm(`整批存入 ${my}/${mm} 讀數：共 ${ch.length} 攤有修改。`+(warn.length?`\n\n⚠️ 注意 ${warn.length} 項：\n`+warn.slice(0,20).join('\n')+(warn.length>20?`\n…另 ${warn.length-20} 項`:''):'\n\n沒有發現倒退或歸零。')+'\n\n確定存入？'))return;
+  const ks=new Set(ch.map(r=>U(r[0])));L.meter=(L.meter||[]).filter(r=>!(ks.has(U(r[0]))&&r[1]==my&&r[2]==mm)).concat(ch);await saveLocal();toast(`已整批存入 ${ch.length} 攤讀數`);meter();};
  $$('#p-meter tr[data-id]').forEach(tr=>{const id=tr.dataset.id,p=prev[U(id)]||[];tr.oninput=()=>{[3,5,7,9].forEach(i=>tr.querySelector('.d'+i).textContent=MarketCalc.delta(+p[i]||0,+tr.querySelector(`[data-i="${i}"]`).value||0));};
   tr.querySelector('[data-sv]').onclick=async()=>{const c=cur[U(id)];const row=[id,my,mm];for(let i=3;i<=10;i++)row.push(+tr.querySelector(`[data-i="${i}"]`).value||0);row.push(c?c[11]:'');
    L.meter=(L.meter||[]).filter(r=>!(U(r[0])==U(id)&&r[1]==my&&r[2]==mm));L.meter.push(row);await saveLocal();toast(id+(syncUrl()?' 讀數已存':' 讀數已存（只存在這台裝置）'));};});}
