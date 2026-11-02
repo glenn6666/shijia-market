@@ -7,13 +7,13 @@ const ZONE={a:['#e6eef7','#7d9cc0','A區攤位'],fe:['#e3f0e6','#7fae8b','F／E�
 const LKEY='sjf_local_v2';
 let KIDS={},P,B,L,D,R,byId,KEY,Y=115,M=4,mapMode='pay';
 const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0)),tob64=u=>{let s='';const a=new Uint8Array(u);for(let i=0;i<a.length;i+=8192)s+=String.fromCharCode.apply(null,a.subarray(i,i+8192));return btoa(s);};
-async function unlock(pw){const E=await (await fetch('data.enc.json',{cache:'no-store'})).json();
+async function unlock(pw){const E=await (await fetch('data.enc.json',{cache:'no-store'})).json();ENC=E;
  const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
  const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt:b64(E.salt),iterations:E.it,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
  const raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(E.iv)},key,b64(E.ct));KEY=key;
  return JSON.parse(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('gzip'))).text());}
 // 本機異動：以同一把金鑰加密後存 localStorage
-let SNAP=null,SE=null,SK=null,LOCALT=0;const SURL='sjf_sync_url',S=window.SJFSync;
+let ENC=null,SNAP=null,SE=null,SK=null,LOCALT=0;const SURL='sjf_sync_url',S=window.SJFSync;
 const syncUrl=()=>(localStorage.getItem(SURL)||'').trim();
 const devId=()=>localStorage.sjf_dev||(localStorage.sjf_dev=(navigator.platform||'dev').slice(0,12)+'-'+Math.random().toString(36).slice(2,8));
 const SLBL={off:['⚪','未設定雲端同步'],busy:['🔄','同步中…'],pending:['🕒','等待同步…'],ok:['🟢','已同步'],offline:['🟠','離線，資料先存在這台，連線後自動同步'],err:['🔴','同步失敗']};
@@ -24,7 +24,25 @@ async function initSync(pw){L=S.stamp(L,null,Date.now(),LOCALT||Date.now());SNAP
  SE=S.Engine({url:syncUrl,token:SK.token,key:SK.key,device:devId(),getL:()=>L,setL:async M=>{L=M;SNAP=S.snap(L);await writeLocal();await permRefresh();refresh();toast('已從雲端合併其他裝置的異動');},setBase:t=>localStorage.sjf_sync_base=t,status:syncStatus});
  syncStatus(syncUrl()?'pending':'off');SE.run();
  setInterval(()=>{if(!document.hidden)SE.run();},60000);addEventListener('online',()=>SE.run());document.addEventListener('visibilitychange',()=>{if(!document.hidden)SE.run();});}
-async function loadLocal(){const s=localStorage.getItem(LKEY);if(!s)return {};try{const o=JSON.parse(s);LOCALT=o.t||0;const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(o.iv)},KEY,b64(o.ct));return JSON.parse(new TextDecoder().decode(pt));}catch(e){toast('本機異動無法解密（可能密碼不同），已略過');return {};}}
+async function loadLocal(){const s=localStorage.getItem(LKEY);if(!s)return {};try{const o=JSON.parse(s);LOCALT=o.t||0;const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(o.iv)},KEY,b64(o.ct));return JSON.parse(new TextDecoder().decode(pt));}catch(e){if(!localStorage.getItem(OLDK))localStorage.setItem(OLDK,s);toast('本機異動是用舊密碼加密的，登入後可輸入舊密碼搬移');return {};}}
+// ── 換密碼後搬移：舊密碼加密的本機異動與照片佇列，輸入舊密碼解開後用新金鑰重新加密（舊密碼不儲存）
+const OLDK='sjf_local_old';
+async function oldKeyTry(pw){for(const salt of (ENC&&ENC.osalt)||[]){const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
+ const k=await crypto.subtle.deriveKey({name:'PBKDF2',salt:b64(salt),iterations:ENC.it,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['decrypt']);
+ try{const o=JSON.parse(localStorage.getItem(OLDK));const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(o.iv)},k,b64(o.ct));return JSON.parse(new TextDecoder().decode(pt));}catch(e){}}return null;}
+async function photoNeedsMig(){try{const all=await PH.qAll()||[];for(const it of all){try{await PH.dec(SK.key,it);}catch(e){return true;}}}catch(e){}return false;}
+async function migPrompt(){const hasL=!!localStorage.getItem(OLDK),hasP=PH&&SK&&await photoNeedsMig();if(!hasL&&!hasP)return;
+ openM(`<h2>🔑 密碼已更換</h2><p>這台裝置上還有用<b>舊密碼</b>加密、還沒同步的資料（${hasL?'本機異動':''}${hasL&&hasP?'、':''}${hasP?'電錶照片':''}）。輸入舊密碼就能搬過來，舊密碼不會被儲存。</p>
+ <form id="mg-f"><input id="mg-pw" type="password" placeholder="舊密碼" autocomplete="off"> <button>搬移</button> <button type="button" class="ghost" id="mg-skip">先不要</button> <button type="button" class="ghost" id="mg-drop">不要了，刪除舊資料</button> <span id="mg-err" class="err"></span></form>`);
+ $('#mg-skip').onclick=()=>$('#modal').hidden=true;
+ $('#mg-drop').onclick=async()=>{if(!confirm('確定刪除這台裝置上用舊密碼加密的資料？刪除後無法救回。'))return;localStorage.removeItem(OLDK);try{for(const it of await PH.qAll()||[]){try{await PH.dec(SK.key,it);}catch(e){await PH.qDel(it.k);}}await loadPQ();}catch(e){}$('#modal').hidden=true;toast('已刪除舊資料');};
+ $('#mg-f').onsubmit=async e=>{e.preventDefault();const pw=$('#mg-pw').value;$('#mg-err').textContent='解密中…';let n=0;
+  if(hasL){const O=await oldKeyTry(pw);if(!O){$('#mg-err').textContent='舊密碼不對';return;}
+   L=S.merge(O,L);localStorage.removeItem(OLDK);SNAP=S.snap(L);await writeLocal();n++;}
+  if(hasP){const ok=await S.keys(pw);let bad=0;for(const it of await PH.qAll()||[]){try{await PH.dec(SK.key,it);continue;}catch(e){}
+    try{const b=await PH.dec(ok.key,it);const en=await PH.enc(SK.key,b);await PH.qPut({...it,iv:en.iv,ct:en.ct});n++;}catch(e){bad++;}}
+   await loadPQ();if(bad&&!hasL){$('#mg-err').textContent='舊密碼不對';return;}}
+  $('#mg-pw').value='';$('#modal').hidden=true;if(SE)SE.soon(500);refresh();toast('已用新密碼重新加密舊資料');};}
 addEventListener('unhandledrejection',e=>{if(e.reason&&e.reason.message=='blocked')e.preventDefault();});
 const A=window.SJFAudit;let PERM={cfg:{p:A.DEF,t:0},state:'none'};
 const opName=()=>localStorage.sjf_op||'';
@@ -47,7 +65,7 @@ $('#lock').onclick=()=>{sessionStorage.removeItem('k');location.reload();};
 function parentOf(id){const m=/^(.+)-\d+$/.exec(id);return m?m[1]:null;}
 function status(o){if(!o)return'nodata';if(o.due==null||o.due===0)return o.paid>0?'over':'empty';if(o.paid<=0)return'unpaid';if(o.bal===0)return'paid';return o.bal<0?'over':'part';}
 let page='ov';
-async function start(){B=P.data;L=await loadLocal();await initSync(sessionStorage.k);await permRefresh();if(!opName()){const n=(prompt('請輸入使用者名稱（例如：小美），修改紀錄會記是誰改的')||'').trim();localStorage.sjf_op=n||'未填';}whoBadge();await loadPQ();setInterval(flushPhotos,90000);setTimeout(flushPhotos,3000);[Y,M]=B.ym;
+async function start(){B=P.data;L=await loadLocal();await initSync(sessionStorage.k);await permRefresh();if(!opName()){const n=(prompt('請輸入使用者名稱（例如：小美），修改紀錄會記是誰改的')||'').trim();localStorage.sjf_op=n||'未填';}whoBadge();await loadPQ();setTimeout(migPrompt,800);setInterval(flushPhotos,90000);setTimeout(flushPhotos,3000);[Y,M]=B.ym;
  $('#yy').innerHTML=Array.from({length:20},(_,i)=>`<option>${111+i}</option>`).join('');$('#mm').innerHTML=Array.from({length:12},(_,i)=>`<option>${i+1}</option>`).join('');
  $('#yy').value=Y;$('#mm').value=M;$('#yy').onchange=$('#mm').onchange=()=>{Y=+$('#yy').value;M=+$('#mm').value;refresh();};
  $('#gate').hidden=true;$('#app').hidden=false;$$('nav a').forEach(a=>a.onclick=()=>go(a.dataset.p));$('#menu').onclick=()=>$('#side').classList.toggle('open');refresh();go('ov');}
@@ -250,7 +268,7 @@ async function takePhoto(id,my,mm,file,tr){if(!PH||!SK)return;toast('照片處�
   <p id="phst" class="muted">${syncUrl()?'上傳到雲端中…':'⚠️ 還沒設定雲端同步：照片先加密存在這台裝置，設定好同步後會自動上傳。'}</p>`);
   setTimeout(()=>{if(!syncUrl()&&page=='meter')meter();flushPhotos();},300);}catch(e){console.error(e);alert('照片處理失敗：'+(e.message||e));}}
 let phBusy=false;
-async function flushPhotos(){if(!PH||!SE||!syncUrl()||phBusy||!PQ.size)return;phBusy=true;
+async function flushPhotos(){if(!PH||!SE||!syncUrl()||phBusy||!PQ.size)return;if(await photoNeedsMig())return;phBusy=true;
  try{const n=await PH.flush(SE.call,async(it,fid)=>{(L.photo=L.photo||{})[it.pk]={f:fid,t:it.t,r:it.r,ex:it.ex?1:0,n:it.name};PQ.delete(it.pk);});
   if(n){const e=$('#phst');if(e)e.textContent='✅ 已上傳到雲端';await saveLocal();toast(`已上傳 ${n} 張電錶照片到雲端`);}}
  catch(e){const m=String(e.message||e);const el=$('#phst');if(el)el.textContent='⚠️ 上傳失敗，稍後自動重試：'+(m=='unknown action'?'Apps Script 還是舊版，請照設定說明更新部署（新版本）':m);}
