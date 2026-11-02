@@ -105,7 +105,13 @@ function render(ctx){ensureCss();const {D,R,Y,M,el}=ctx;const key=Y+'/'+M;
   $('#pr-go').onclick=()=>{const L=R.filter(o=>ST.sel.has(U(o.id)));if(!L.length)return alert('請先勾選攤位');printPages(ST.fmt,D,L,Y,M,ST.adj[ST.fmt],ST.up);};
   pv();}
 function printPages(fmt,D,L,Y,M,adj,up){up=up==1?1:2;ensureCss();setPage(fmt,up);let r=document.getElementById('prtroot');if(!r){r=document.createElement('div');r.id='prtroot';document.body.appendChild(r);}
-  r.innerHTML=sheets(fmt,D,L,Y,M,adj||{x:0,y:0},up);setTimeout(()=>window.print(),50);}
+  r.innerHTML=sheets(fmt,D,L,Y,M,adj||{x:0,y:0},up);
+  // 其他頁（報表／損益／保證金／年度）的 <style> 內含 @page{margin:10~15mm} 與 body *{visibility:hidden}，留在 DOM 時會蓋掉三聯單的 margin:0，整張往右下偏移；列印期間先停用
+  document.body.classList.remove('rpt');const rp=document.getElementById('rptpage');if(rp)rp.textContent='';
+  const off=[...document.querySelectorAll('style')].filter(x=>x.id!='prtpage'&&x.id!='prtcss'&&/@page|visibility:hidden/.test(x.textContent)&&x.media!='not all');
+  off.forEach(x=>{x.dataset.m=x.media||'';x.media='not all';});document.head.appendChild(document.getElementById('prtpage'));
+  const done=()=>{off.forEach(x=>{x.media=x.dataset.m;});window.removeEventListener('afterprint',done);};window.addEventListener('afterprint',done);
+  setTimeout(()=>window.print(),50);}
 // 每攤一頁（同原 Excel）
 function sheets(fmt,D,L,Y,M,adj,up){let P;
   if(fmt=='tri'){P=[];for(let i=0;i<L.length;i+=2)P.push(pageHtml(fmt,D,L[i],Y,M,adj,L[i+1]||null));}
