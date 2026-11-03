@@ -79,8 +79,9 @@ function today(){const q=/[?&]today=(\d{4})-(\d\d)-(\d\d)/.exec(location.search)
 function readStat(ry,rm){const [py,pm]=MarketCalc.prevYM(ry,rm),cur={},prev={};D.meters.forEach(r=>{const k=U(r[0]);if(r[1]==ry&&r[2]==rm)cur[k]=r;if(r[1]==py&&r[2]==pm)prev[k]=r;});
  const lk=new Set((L.meter||[]).filter(r=>r[1]==ry&&r[2]==rm).map(r=>U(r[0])));
  const [by,bm]=rm==12?[ry+1,1]:[ry,rm+1],act=D.stalls.filter(s=>!MarketCalc.isOff(s,by,bm)&&(cur[U(s.id)]||prev[U(s.id)]));
- const same=(k,ix)=>{const c=cur[k],p=prev[k];if(p&&ix.every(i=>!+p[i])&&(!c||ix.every(i=>!+c[i])))return false;if(!c)return true;if(lk.has(k))return false;return ix.every(i=>(+c[i]||0)==(+p?.[i]||0));};
- const st={},ph=new Set(Object.keys(L.photo||{}).filter(k=>k.endsWith('|'+ry+'|'+rm)).map(k=>k.split('|')[0]));
+ // 有該月讀數＝已抄（度數沒變＝錶沒動，也算已抄）；沒有任何錶的攤位不算
+ const same=(k,ix)=>{const c=cur[k],p=prev[k];if(p&&ix.every(i=>!+p[i])&&(!c||ix.every(i=>!+c[i])))return false;return !c;};
+ const st={},sf='|'+ry+'|'+rm,ph=new Set([...Object.keys(L.photo||{}),...Object.keys(L.phOk||{}).filter(k=>L.phOk[k]),...(B.phOk||[])].filter(k=>k.endsWith(sf)).map(k=>U(k.split('|')[0])));
  act.forEach(s=>{const k=U(s.id),w=MarketCalc.waterDue(s,rm);st[k]={s,w,eTodo:same(k,[3,5]),wTodo:w&&same(k,[7,9]),ph:!!s.ph,phTodo:!!s.ph&&!ph.has(k)};});return st;}
 function remind(){const el=$('#remind');if(!el)return;const t=today(),d=t.getDate(),last=new Date(t.getFullYear(),t.getMonth()+1,0).getDate();
  let ry=t.getFullYear()-1911,rm=t.getMonth()+1,late=false;if(d<=5){[ry,rm]=MarketCalc.prevYM(ry,rm);late=true;}else if(d<25){el.hidden=true;return;}
@@ -277,13 +278,14 @@ function meter(){const [my,mm]=MarketCalc.prevYM(Y,M),[py,pm]=MarketCalc.prevYM(
   <td class="n">${num(p[3])}</td><td><input data-i="3" value="${c[3]}"></td><td class="n d3">${dl(3)}</td><td><input data-i="4" value="${c[4]}"></td>
   <td class="n">${num(p[5])}</td><td><input data-i="5" value="${c[5]}"></td><td class="n d5">${dl(5)}</td><td><input data-i="6" value="${c[6]}"></td>
   <td class="n">${num(p[7])}</td><td><input data-i="7" value="${c[7]}"></td><td class="n d7">${dl(7)}</td><td><input data-i="8" value="${c[8]}"></td>
-  <td class="n">${num(p[9])}</td><td><input data-i="9" value="${c[9]}"></td><td class="n d9">${dl(9)}</td><td><input data-i="10" value="${c[10]}"></td><td style="white-space:nowrap"><button class="sm" data-sv>存</button>${x.ph||s.ph?` <label class="sm btn ph" title="拍電錶照片（自動加拍照日期）">📷<input type="file" accept="image/*" capture="environment" data-ph hidden></label>`:''}</td></tr>`;});
+  <td class="n">${num(p[9])}</td><td><input data-i="9" value="${c[9]}"></td><td class="n d9">${dl(9)}</td><td><input data-i="10" value="${c[10]}"></td><td style="white-space:nowrap"><button class="sm" data-sv>存</button>${x.ph||s.ph?` <label class="sm btn ph" title="拍電錶照片（自動加拍照日期）">📷<input type="file" accept="image/*" capture="environment" data-ph hidden></label> <label class="sm" title="照片已在外面拍好（不用上傳）" style="white-space:nowrap"><input type="checkbox" data-phok style="width:auto"${x.ph&&!x.phTodo?' checked':''}${(B.phOk||[]).includes(pk)?' disabled':''}> 本月已拍照</label>`:''}</td></tr>`;});
  $('#p-meter').innerHTML=`<div class="card"><p>帳單 ${ymTxt()} 用的是 <b>${py}/${pm} → ${my}/${mm}</b> 的讀數差（水電晚一個月），費率取 ${my}/${mm} 那筆。這頁輸入的是 <b>${my} 年 ${mm} 月</b> 的讀數（${mm}/28 抄表）。</p>
  <p class="mtsum">⚡ 電錶全部抄，還沒登記 <b>${VS.filter(v=>v.eTodo).length}</b> 攤　💧 水錶 ${[4,10].includes(mm)?'全部抄':VS.some(v=>v.w)?'每季攤位抄':'本月不用抄'}，還沒登記 <b>${VS.filter(v=>v.wTodo).length}</b> 攤　📷 還沒拍照 <b>${VS.filter(v=>v.phTodo).length}</b> 攤　<span class="muted">（黃底＝還沒抄；「還沒登記」＝本月讀數跟上月一模一樣或沒有讀數）</span></p>
  <div class="row"><input id="mtq" placeholder="攤位／姓名" value="${esc(mtQ)}"><label class="muted"><input type="checkbox" id="mtonly" style="width:auto" ${mtOnly?'checked':''}> 只顯示有抄表的攤位</label><label class="muted"><input type="checkbox" id="mttodo" style="width:auto" ${mtTodo?'checked':''}> 只顯示還沒抄／還沒拍照的</label><button id="mtall">整批存入</button><button class="ghost" id="mtcsv">匯出 CSV</button><span class="muted">${rows.length} 攤</span></div>
  ${tbl(['攤位','租客','電1上月','電1本月','度數','電1費率','電2上月','電2本月','度數','電2費率','水1上月','水1本月','度數','水1費率','水2上月','水2本月','度數','水2費率',''],rows)}
  <p class="muted" style="font-size:12px">度數照原表：本月−上月；若為負（跳表）＝基數−1−上月＋本月（基數依上月讀數位數 100/1000/10000/100000，少算 1 度照抄）。儲存會取代該攤該月的讀數（原表同攤同月多列會相加）。</p></div>`;
  $('#mtq').onchange=e=>{if(e.target.value===mtQ)return;mtQ=e.target.value;meter();};$('#mtonly').onchange=e=>{mtOnly=e.target.checked;meter();};$('#mttodo').onchange=e=>{mtTodo=e.target.checked;meter();};
+ $$('#p-meter [data-phok]').forEach(c=>c.onchange=async()=>{const pk=U(c.closest('tr').dataset.id)+'|'+my+'|'+mm;L.phOk=L.phOk||{};if(c.checked)L.phOk[pk]={t:Date.now(),by:opName()};else delete L.phOk[pk];await saveLocal();toast(c.checked?'已標記本月已拍照':'已取消已拍照');meter();});
  $$('#p-meter [data-ph]').forEach(inp=>inp.onchange=()=>{const tr=inp.closest('tr');if(inp.files[0])takePhoto(tr.dataset.id,my,mm,inp.files[0],tr);inp.value='';});$('#mtcsv').onclick=()=>csv('水電錶登記',meterSheet());
  $('#mtall').onclick=async()=>{const ch=[],warn=[],nm=['電1','電2','水1','水2'];
   $$('#p-meter tr[data-id]').forEach(tr=>{const id=tr.dataset.id,k=U(id),c=cur[k],p=prev[k]||[];const row=[id,my,mm];for(let i=3;i<=10;i++)row.push(+tr.querySelector(`[data-i="${i}"]`).value||0);row.push(c?c[11]:'');
