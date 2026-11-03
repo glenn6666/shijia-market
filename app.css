@@ -60,3 +60,4 @@ button.danger{background:#c62828;color:#fff;border-color:#c62828}button:disabled
 .flt{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0;font-size:14px}tr.lg-undo td{background:#f3f7ee}
 #gf #opn{margin-bottom:8px}
 .flt input,.flt select{width:auto;display:inline-block;margin:0}
+.stf{margin-top:8px;gap:10px;font-size:14px}.stf label{display:inline-flex;align-items:center;gap:4px}.stf input[type=checkbox]{width:auto}
