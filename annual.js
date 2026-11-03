@@ -44,7 +44,7 @@ function build(D,H,y,mode){const h=H&&H.hist?hist(H.hist,y):null;let o;
 function compareYears(D,H,mode,y1){const ys=[];for(let y=110;y<=y1;y++)ys.push(y);const T={};ys.forEach(y=>{const o=build(D,H,y,mode);T[y]=o.rows;});
   const K=INC.concat(['總計','費用','損益']);return {ys,rows:K.map(k=>[k,ys.map(y=>sum(T[y][k]))]),bank:ys.map(y=>{const b=T[y].存款餘額.filter(v=>v!=null);return b.length?b[b.length-1]:null;})};}
 const CSS=`.an-pg{background:#fff;color:#000;font:10px "Microsoft JhengHei","PMingLiU",sans-serif;width:277mm;margin:0 auto 6mm;page-break-after:always}
-.an-pg:last-child{page-break-after:auto}.an-pg h2{text-align:center;font-size:15px;margin:0 0 2mm}.an-t{border-collapse:collapse;width:100%}
+.an-dash{font-size:13px;background:#f8fafc;padding:4mm;border-radius:10px}.an-pg:last-child{page-break-after:auto}.an-pg h2{text-align:center;font-size:15px;margin:0 0 2mm}.an-t{border-collapse:collapse;width:100%}
 .an-t th,.an-t td{border:1px solid #000;padding:1px 3px;white-space:nowrap}.an-t td{text-align:right}.an-t td:first-child,.an-t th:first-child{text-align:left}
 .an-t tr.b td{font-weight:bold;background:#f2f2f2}.an-t .sp td{border:0;height:6px}.an-d{color:#b00}.an-note{font-size:9px;margin-top:2mm}
 @media print{@page{size:A4 landscape;margin:8mm}body *{visibility:hidden}#anprint,#anprint *{visibility:visible}#anprint{position:absolute;left:0;top:0}.an-noprint{display:none}}`;
@@ -68,7 +68,8 @@ function html(D,H,y,mode){const o=build(D,H,y,mode),r=o.rows,hd=`<tr><th></th>${
    <tr><td>存款餘額(年底)</td>${Y.bank.map(x=>`<td>${f(x)}</td>`).join('')}<td></td></tr></table><div class="an-note">平均只算有資料的年度。</div></div>`;
   let cmp='';if(o.cmp){const L=[];INC.concat(['費用']).forEach(k=>o.rows[k].forEach((v,i)=>{const h=o.cmp.rows[k][i];if(v!=null&&h!=null&&Math.round(v)!==Math.round(h))L.push(`<tr><td>${MN[i]}</td><td>${k}</td><td>${f(h)}</td><td>${f(v)}</td><td class="an-d">${f(v-h)}</td></tr>`);}));
     cmp=`<div class="card an-noprint"><b>跟原年度報表檔對帳（${y}年）</b>：${L.length?`${L.length} 格不同`:'有資料的月份全部相同'}${L.length?`<div class="tbl"><table><tr><th>月</th><th>項目</th><th>原檔</th><th>網頁</th><th>差</th></tr>${L.join('')}</table></div>`:''}</div>`;}
-  return {o,cmp,body:p1+p2+p3+p4};}
+  let p0='';const AC=G.SJFAnChart;if(AC){const pv=y>110?build(D,H,y-1,mode):null;if(pv)finish(pv);p0=`<div class="an-pg an-dash"><h2>${y}年年度報表・圖表總覽</h2>${AC.dash(o,pv&&pv.rows,Y)}</div>`;}
+  return {o,cmp,body:p0+p1+p2+p3+p4};}
 function xls(D,H,y,mode){const o=build(D,H,y,mode),r=o.rows,x=v=>String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const cell=v=>v==null||v===''?'<Cell/>':typeof v=='number'?`<Cell><Data ss:Type="Number">${Math.round(v)}</Data></Cell>`:`<Cell><Data ss:Type="String">${x(v)}</Data></Cell>`;
   const sh=(n,rows)=>`<Worksheet ss:Name="${x(n)}"><Table>${rows.map(a=>`<Row>${a.map(cell).join('')}</Row>`).join('')}</Table></Worksheet>`;
@@ -96,11 +97,11 @@ function page(){const el=document.getElementById('p-annual');if(!H){el.innerHTML
   el.querySelector('#anf').onsubmit=async ev=>{ev.preventDefault();const pw=el.querySelector('#anpw').value;el.querySelector('#anerr').textContent='解鎖中…';
     try{const E=await (await fetch('owner.enc.json',{cache:'no-store'})).json();H=await gun((await dec(E,pw)).raw);D=await loadD();page();}catch(_){H=null;el.querySelector('#anerr').textContent='老闆密碼不對';}};return;}
   yy=yy||D.ym[0];const h=html(D,H,yy,mode);const ys=[];for(let y=110;y<=D.ym[0];y++)ys.push(y);
-  el.innerHTML=`<style>${CSS}</style><div class="card an-noprint"><b>🔐 年度報表</b> 年度 <select id="any">${ys.map(y=>`<option ${y==yy?'selected':''}>${y}</option>`).join('')}</select>
+  el.innerHTML=`<style>${CSS}${G.SJFAnChart?G.SJFAnChart.CSS:''}</style><div class="card an-noprint"><b>🔐 年度報表</b> 年度 <select id="any">${ys.map(y=>`<option ${y==yy?'selected':''}>${y}</option>`).join('')}</select>
    <select id="anm"><option value="live" ${mode=='live'?'selected':''}>網頁資料計算</option><option value="hist" ${mode=='hist'?'selected':''}>原年度報表檔（110–114）</option></select>
    <button id="anp">🖨️ 列印（A4 橫式）</button> <button id="anx" class="ghost">⬇️ 匯出 Excel</button> <button id="anl" class="ghost">🔒 上鎖</button>
    ${h.o.miss.length?`<details><summary>沒有資料來源、留空的欄位（${h.o.miss.length}）</summary><ul>${h.o.miss.map(m=>`<li>${e(m)}</li>`).join('')}</ul></details>`:''}</div>${h.cmp}<div id="anprint">${h.body}</div>`;
-  el.querySelector('#any').onchange=ev=>{yy=+ev.target.value;page();};el.querySelector('#anm').onchange=ev=>{mode=ev.target.value;page();};
+  if(G.SJFAnChart&&!el._tips){el._tips=1;G.SJFAnChart.bindTips(el);}el.querySelector('#any').onchange=ev=>{yy=+ev.target.value;page();};el.querySelector('#anm').onchange=ev=>{mode=ev.target.value;page();};
   el.querySelector('#anp').onclick=()=>SJFPrint.printArea('#anprint','A4 landscape');el.querySelector('#anl').onclick=()=>{H=null;D=null;page();};
   el.querySelector('#anx').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([xls(D,H,yy,mode)],{type:'application/vnd.ms-excel'}));a.download=`十甲發市場_${yy}年度報表.xls`;a.click();};}
 function inject(){const nav=document.querySelector('nav'),main=document.querySelector('main');if(!nav||!main||document.getElementById('p-annual'))return;
