@@ -37,10 +37,10 @@ function fnum(v,nf){if(typeof v!=='number')return {t:String(v)};
   if(Number.isInteger(v))return {t:String(v)};return {t:String(+v.toPrecision(10))};}
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 // 三聯單套印位置修正（依 LQ-310 試印照片，mm；負值=往上/往左）
-const TRI_OFF={H5:{x:-7,y:0},I6:{x:0,y:-2},I7:{x:0,y:-2},I9:{x:0,y:-2},I10:{x:0,y:-2},I13:{x:0,y:-2},I14:{x:0,y:-2},I16:{x:0,y:-2},I17:{x:0,y:-2},D25:{x:0,y:-3}};
+const TRI_OFF={H5:{x:-7,y:0},I6:{x:-5,y:-2,w:15.37,ha:'right',sz:12},I7:{x:-5,y:-2,w:15.37,ha:'right',sz:12},I9:{x:-5,y:-2,w:15.37,ha:'right',sz:12},I10:{x:-5,y:-2,w:15.37,ha:'right',sz:12},I13:{x:-5,y:-2,w:15.37,ha:'right',sz:12},I14:{x:-5,y:-2,w:15.37,ha:'right',sz:12},I16:{x:-5,y:-2,w:15.37,ha:'right',sz:12},I17:{x:-5,y:-2,w:15.37,ha:'right',sz:12},D25:{x:0,y:-3}};
 function cellHtml(c,v,showBorders){let txt=c.t!=null?{t:c.t}:null;if(c.f||c.a in v){txt=c.a in v?fnum(v[c.a],c.nf):null;}
   if(c.a=='H5'||/^G(5|25|45)$/.test(c.a))txt=c.a in v?{t:String(v[c.a])}:txt;
-  const off=(!showBorders&&c.tri&&TRI_OFF[c.a])||{x:0,y:0};let st=`left:${(c.x+off.x).toFixed(2)}mm;top:${(c.y+off.y).toFixed(2)}mm;width:${c.w}mm;height:${c.h}mm;font-size:${c.sz}pt;`;
+  const off=(!showBorders&&c.tri&&TRI_OFF[c.a])||{x:0,y:0};if(off.w)c=Object.assign({},c,{w:off.w,ha:off.ha,sz:off.sz});let st=`left:${(c.x+off.x).toFixed(2)}mm;top:${(c.y+off.y).toFixed(2)}mm;width:${c.w}mm;height:${c.h}mm;font-size:${c.sz}pt;`;
   if(c.b)st+='font-weight:700;';
   const ja=c.ha=='center'||c.ha=='centerContinuous'?'center':c.ha=='right'?'flex-end':(c.ha=='left'||!c.ha&&!(txt&&/^-?[\d,.]+\s?$/.test(txt.t)))?'flex-start':'flex-end';
   const al=c.va=='top'?'flex-start':c.va=='center'?'center':'flex-end';st+=`justify-content:${ja};align-items:${al};`;
