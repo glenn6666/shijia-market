@@ -7,10 +7,10 @@ const SEP='\u0001',te=new TextEncoder();
 const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0)),tob64=u=>btoa(String.fromCharCode(...new Uint8Array(u)));
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 // 區塊：資料類別 → 權限區塊
-const SEC={stall:'攤位建檔（含租金、移除／復原）',pay:'繳費登記（含刪除）',meter:'水電錶登記（含拍照）',jr:'日帳流水帳',dep:'已收保證金'};
-const CAT={stall:'stall',stallNew:'stall',rent:'stall',pay:'pay',payDel:'pay',meter:'meter',photo:'meter',phOk:'meter',jr:'jr',jrDel:'jr',dep:'dep',perm:'perm'};
-const CLBL={stall:'攤位資料',stallNew:'新增攤位',rent:'租金費率',pay:'繳費',payDel:'刪除原表繳費',meter:'水電錶讀數',photo:'電錶照片',phOk:'本月已拍照（手動勾）',jr:'流水帳',jrDel:'刪除原表流水帳',dep:'保證金',perm:'權限設定'};
-const DEF={stall:'edit',pay:'edit',meter:'edit',jr:'edit',dep:'edit'};
+const SEC={stall:'攤位建檔（含租金、移除／復原）',pay:'繳費登記（含刪除）',meter:'水電錶登記（含拍照）',jr:'日帳流水帳',dep:'已收保證金',ct:'線上合約書'};
+const CAT={stall:'stall',stallNew:'stall',rent:'stall',pay:'pay',payDel:'pay',meter:'meter',photo:'meter',phOk:'meter',jr:'jr',jrDel:'jr',dep:'dep',ct:'ct',perm:'perm'};
+const CLBL={stall:'攤位資料',stallNew:'新增攤位',rent:'租金費率',pay:'繳費',payDel:'刪除原表繳費',meter:'水電錶讀數',photo:'電錶照片',phOk:'本月已拍照（手動勾）',jr:'流水帳',jrDel:'刪除原表流水帳',dep:'保證金',ct:'合約書',perm:'權限設定'};
+const DEF={stall:'edit',pay:'edit',meter:'edit',jr:'edit',dep:'edit',ct:'edit'};
 let OWNER=null,LASTOK=null;// OWNER: 老闆私鑰（只在記憶體）
 const canonCfg=c=>JSON.stringify({p:Object.keys(SEC).reduce((o,k)=>(o[k]=c.p&&c.p[k]=='view'?'view':'edit',o),{}),t:+c.t||0});
 let pubKey=null;const pk=async()=>pubKey||(pubKey=await crypto.subtle.importKey('jwk',PUB,{name:'ECDSA',namedCurve:'P-256'},false,['verify']));
@@ -33,7 +33,7 @@ function diff(prev,next){const out=[],keys=new Set([...Object.keys(prev||{}),...
 function blocked(ch,cfg){if(OWNER)return [];const s=new Set();ch.forEach(x=>{const sec=CAT[x.c];if(sec=='perm')s.add('權限設定（只有老闆能改）');else if(cfg.p[sec]=='view')s.add(SEC[sec]);});return [...s];}
 // 從異動推出攤位與說明
 function stallOf(x,lk){const k=x.k.slice(x.k.indexOf(SEP)+1),v=JSON.parse(x.n||x.o||'null');
- switch(x.c){case 'meter':return v[0];case 'rent':return v[1];case 'stallNew':return v.id;case 'stall':return k;case 'pay':return v.st;case 'photo':case 'phOk':return k.split('|')[0];case 'dep':return k;
+ switch(x.c){case 'meter':return v[0];case 'rent':return v[1];case 'stallNew':return v.id;case 'stall':return k;case 'pay':return v.st;case 'photo':case 'phOk':return k.split('|')[0];case 'dep':return k;case 'ct':return v&&v.stalls?v.stalls.map(s=>s.id).filter(Boolean).join('、'):(v&&v.landNo)||k;
   case 'payDel':case 'jrDel':return lk?lk(x.c,k):'';default:return '';}}
 const ME={meter:['攤位','年','月','電1讀數','電1費率','電2讀數','電2費率','水1讀數','水1費率','水2讀數','水2費率','備註'],rent:['生效','攤位','姓名','類別','日租','月租','冰庫','停車','清潔']};
 function fields(x){const o=JSON.parse(x.o||'null'),n=JSON.parse(x.n||'null');if(x.c=='payDel'||x.c=='jrDel')return o?'取消刪除（還原）':'刪除';

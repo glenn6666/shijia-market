@@ -56,7 +56,7 @@ async function saveLocal(opt){const ch=A.diff(SNAP,S.snap(L));
    alert('這台目前是員工身分，以下項目老闆設定為「只能看」，這次修改沒有存：\n\n'+bl.join('\n')+'\n\n要修改請找老闆，或到「修改紀錄」用老闆密碼解鎖。');throw new Error('blocked');}
   const lg=(L.log||[]).concat(A.mkLog(ch,opName(),opt&&opt.undo));L.log=lg.length>6000?lg.slice(-6000):lg;}
  L=S.stamp(L,SNAP,Date.now());SNAP=S.snap(L);await writeLocal();await permRefresh();refresh();if(SE)SE.soon();}
-function cnt(){return (L.pay||[]).length+(L.payDel||[]).length+(L.meter||[]).length+(L.jr||[]).length+(L.jrDel||[]).length+(L.rent||[]).length+Object.keys(L.stall||{}).length+(L.stallNew||[]).length+Object.keys(L.dep||{}).length;}
+function cnt(){return (L.pay||[]).length+(L.payDel||[]).length+(L.meter||[]).length+(L.jr||[]).length+(L.jrDel||[]).length+(L.rent||[]).length+Object.keys(L.stall||{}).length+(L.stallNew||[]).length+Object.keys(L.dep||{}).length+Object.keys(L.ct||{}).filter(k=>!(L.ct[k]&&L.ct[k].del)).length;}
 function toast(t){const e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(e._t);e._t=setTimeout(()=>e.hidden=true,2500);}
 $('#gf').onsubmit=async e=>{e.preventDefault();const op=$('#opn').value.trim();if(!op){$('#gerr').textContent='請填使用者名稱（修改紀錄會記是誰改的）';return;}localStorage.sjf_op=op;$('#gerr').textContent='解密中…';try{P=await unlock($('#pw').value);sessionStorage.k=$('#pw').value;start();}catch(x){console.error(x);$('#gerr').textContent='密碼錯誤';}};
 if(sessionStorage.k){unlock(sessionStorage.k).then(p=>{P=p;start();}).catch(()=>sessionStorage.removeItem('k'));}
@@ -84,21 +84,26 @@ function readStat(ry,rm){const [py,pm]=MarketCalc.prevYM(ry,rm),cur={},prev={};D
  const same=(k,ix)=>{const c=cur[k],p=prev[k];if(p&&ix.every(i=>!+p[i])&&(!c||ix.every(i=>!+c[i])))return false;return !c;};
  const st={},sf='|'+ry+'|'+rm,ph=new Set([...Object.keys(L.photo||{}),...Object.keys(L.phOk||{}).filter(k=>L.phOk[k]),...(B.phOk||[])].filter(k=>k.endsWith(sf)).map(k=>U(k.split('|')[0])));
  act.forEach(s=>{const k=U(s.id),w=MarketCalc.waterDue(s,rm);st[k]={s,w,eTodo:same(k,[3,5]),wTodo:w&&same(k,[7,9]),ph:!!s.ph,phTodo:!!s.ph&&!ph.has(k)};});return st;}
-function remind(){const el=$('#remind');if(!el)return;const t=today(),d=t.getDate(),last=new Date(t.getFullYear(),t.getMonth()+1,0).getDate();
- let ry=t.getFullYear()-1911,rm=t.getMonth()+1,late=false;if(d<=5){[ry,rm]=MarketCalc.prevYM(ry,rm);late=true;}else if(d<25){el.hidden=true;return;}
- const st=readStat(ry,rm),V=Object.values(st),wAll=[4,10].includes(rm),wq=V.filter(x=>x.w&&x.s.wq&&x.s.wq!='h').map(x=>x.s.id);
- const eT=V.filter(x=>x.eTodo).length,wT=V.filter(x=>x.wTodo).length,pT=V.filter(x=>x.phTodo).map(x=>x.s.id),phs=V.filter(x=>x.ph).map(x=>x.s.id);
- if(late&&!eT&&!wT&&!pT.length){el.hidden=true;return;}
- const is28=!late&&d==28,when=late?`上個月（${ry}/${rm}）的抄表還沒登記完`:is28?`今天 ${rm}/28 是抄表日`:d<28?`${rm}/28（再 ${28-d} 天）要抄水電錶`:`${rm}/28 已過，抄表要趕快登記`;
- const water=wAll?'<b>全部攤位</b>都要抄（4、10 月）':wq.length?`<b>每季抄</b>的 ${wq.length} 攤：${wq.map(esc).join('、')}`:'這個月不用抄';
- el.className='remind'+(is28?' hot':'');el.hidden=false;
- el.innerHTML=`<div class="rm-t">📅 ${when}</div><div class="rm-b"><span>⚡ 電錶：全部攤位　<b>還沒登記 ${eT} 攤</b></span><span>💧 水錶：${water}${wAll||wq.length?`　<b>還沒登記 ${wT} 攤</b>`:''}</span>${phs.length?`<span>📷 電錶要拍照：${phs.map(esc).join('、')}${pT.length?`　<b>還沒拍 ${pT.length} 攤</b>`:'　✅ 都拍了'}</span>`:''}</div><button class="sm" id="rm-go">前往水電錶登記（${ry}/${rm} 讀數）</button>`;
- $('#rm-go').onclick=()=>{[Y,M]=rm==12?[ry+1,1]:[ry,rm+1];$('#yy').value=Y;$('#mm').value=M;mtTodo=true;refresh();go('meter');};}
+function remind(){const el=$('#remind');if(!el)return;const t=today(),d=t.getDate();
+ const CT=window.SJFContract,soon=CT?CT.expiring(L,60):[],ctHtml=soon.length?`<div class="rm-b"><span>📝 合約將到期（60 天內）<b>${soon.length} 份</b>：${soon.slice(0,8).map(c=>{const ids=(c.stalls||[]).map(s=>s.id).filter(Boolean).join('、')||c.landNo||c.name;return `${esc(c.name||'')}（${esc(ids)}，剩 ${CT.daysLeft(c.y2,c.m2,c.d2)} 天）`;}).join('、')}${soon.length>8?'…':''}</span></div><button class="sm" id="rm-ct">前往線上合約書</button>`:'';
+ let ry=t.getFullYear()-1911,rm=t.getMonth()+1,late=false;let meterOn=true;
+ if(d<=5){[ry,rm]=MarketCalc.prevYM(ry,rm);late=true;}else if(d<25){meterOn=false;}
+ let meterHtml='';
+ if(meterOn){const st=readStat(ry,rm),V=Object.values(st),wAll=[4,10].includes(rm),wq=V.filter(x=>x.w&&x.s.wq&&x.s.wq!='h').map(x=>x.s.id);
+  const eT=V.filter(x=>x.eTodo).length,wT=V.filter(x=>x.wTodo).length,pT=V.filter(x=>x.phTodo).map(x=>x.s.id),phs=V.filter(x=>x.ph).map(x=>x.s.id);
+  if(!(late&&!eT&&!wT&&!pT.length)){const is28=!late&&d==28,when=late?`上個月（${ry}/${rm}）的抄表還沒登記完`:is28?`今天 ${rm}/28 是抄表日`:d<28?`${rm}/28（再 ${28-d} 天）要抄水電錶`:`${rm}/28 已過，抄表要趕快登記`;
+   const water=wAll?'<b>全部攤位</b>都要抄（4、10 月）':wq.length?`<b>每季抄</b>的 ${wq.length} 攤：${wq.map(esc).join('、')}`:'這個月不用抄';
+   meterHtml=`<div class="rm-t">📅 ${when}</div><div class="rm-b"><span>⚡ 電錶：全部攤位　<b>還沒登記 ${eT} 攤</b></span><span>💧 水錶：${water}${wAll||wq.length?`　<b>還沒登記 ${wT} 攤</b>`:''}</span>${phs.length?`<span>📷 電錶要拍照：${phs.map(esc).join('、')}${pT.length?`　<b>還沒拍 ${pT.length} 攤</b>`:'　✅ 都拍了'}</span>`:''}</div><button class="sm" id="rm-go">前往水電錶登記（${ry}/${rm} 讀數）</button>`;}}
+ if(!meterHtml&&!ctHtml){el.hidden=true;return;}
+ el.className='remind'+(meterHtml&&!late&&d==28?' hot':'');el.hidden=false;
+ el.innerHTML=(meterHtml||(ctHtml?`<div class="rm-t">📝 合約到期提醒</div>`:''))+ctHtml;
+ const g=$('#rm-go');if(g)g.onclick=()=>{[Y,M]=rm==12?[ry+1,1]:[ry,rm+1];$('#yy').value=Y;$('#mm').value=M;mtTodo=true;refresh();go('meter');};
+ const c=$('#rm-ct');if(c)c.onclick=()=>go('ct');}
 function whoBadge(){const e=$('#who');if(!e)return;e.innerHTML=`👤 ${esc(opName())}${A.isOwner()?' <b class="own">老闆</b>':''}`;e.onclick=()=>{const n=(prompt('更改使用者名稱',opName())||'').trim();if(n){localStorage.sjf_op=n;whoBadge();}};}
-const PAGES={log:()=>SJFLog.render({el:$('#p-log'),L:()=>L,setL:x=>{L=x;},save:saveLocal,B,perm:()=>PERM,whoBadge,refresh}),ov,map,stall,pay,meter,jr,pl,ar,data,dep:()=>SJFDep.render({B,L,el:$('#p-dep'),save:saveLocal}),close:()=>SJFClose.render({D,Y,M,el:$('#p-close')}),prt:()=>SJFPrint.render({D,R,Y,M,el:$('#p-prt')})};
+const PAGES={log:()=>SJFLog.render({el:$('#p-log'),L:()=>L,setL:x=>{L=x;},save:saveLocal,B,perm:()=>PERM,whoBadge,refresh}),ov,map,stall,pay,meter,jr,pl,ar,data,dep:()=>SJFDep.render({B,L,el:$('#p-dep'),save:saveLocal}),ct:()=>SJFContract.render({B,L,R,el:$('#p-ct'),save:saveLocal,byId:k=>byId[k],toast}),close:()=>SJFClose.render({D,Y,M,el:$('#p-close')}),prt:()=>SJFPrint.render({D,R,Y,M,el:$('#p-prt')})};
 function go(p){page=p;$$('nav a').forEach(a=>a.classList.toggle('on',a.dataset.p==p));$$('main section').forEach(s=>s.hidden=s.id!='p-'+p);
  $('#ttl').textContent=$('nav a[data-p='+p+']').textContent.slice(2).trim();$('#side').classList.remove('open');render(p);}
-const PSEC={stall:'stall',pay:'pay',meter:'meter',jr:'jr',dep:'dep'};
+const PSEC={stall:'stall',pay:'pay',meter:'meter',jr:'jr',dep:'dep',ct:'ct'};
 function render(p){PAGES[p]();const sec=PSEC[p],el=$('#p-'+p);if(sec&&lockedSec(sec)&&el)el.insertAdjacentHTML('afterbegin','<div class="ro-bar">🔒 老闆設定這一頁員工<b>只能看、不能改</b>，按存檔也不會存。</div>');}
 const ymTxt=()=>`${Y} 年 ${M} 月`;
 function tbl(head,rows,cls){return `<div class="tbl"><table class="${cls||''}"><thead><tr>${head.map(h=>`<th class="${/^(應收|已收|餘款|金額|實收|月租|冰庫|停車|清潔|日租|電費|水費|度數|金額計算)/.test(h)?'n':''}">${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;}
@@ -146,9 +151,9 @@ function card(id){const o=byId[U(id)];let h;const par=parentOf(id)||id,fam=[par]
  <div><b>月租</b>${fmt(r.mon)}</div><div><b>日租</b>${fmt(r.day)}</div><div><b>冰庫</b>${fmt(r.ice)}</div><div><b>停車</b>${fmt(r.park)}</div><div><b>清潔費</b>${fmt(r.clean)}</div><div><b>電費／水費</b>${fmt(o.elec)}${o.eDisc?`<small class="muted">（原 ${num(o.elecGross)}，折 ${num(o.eDisc)}）</small>`:''}／${fmt(o.water)}</div>
  <div><b>水電讀數月份</b>${o.pY.join('/')} → ${o.mY.join('/')}</div><div><b>合約</b>未登錄</div>${q('e1','電錶1')}${q('e2','電錶2')}${q('w1','水錶1')}${q('w2','水錶2')}</div>
  <div class="kpis" style="grid-template-columns:repeat(3,1fr);margin:12px 0"><div class="card kpi">本月應收<div class="v" style="font-size:18px">${fmt(o.due)}</div></div><div class="card kpi">本月已收<div class="v" style="font-size:18px">${fmt(o.paid)}</div></div><div class="card kpi">本月餘款<div class="v" style="font-size:18px">${fmt(o.bal)}</div></div></div>
- <div class="row"><button id="c-pay">登記繳費／銷帳</button><button id="c-ed" class="ghost">編輯攤位</button></div>
+ <div class="row"><button id="c-pay">登記繳費／銷帳</button><button id="c-ed" class="ghost">編輯攤位</button><button id="c-ct" class="ghost">合約書</button></div>
  <h3>繳費紀錄（最近 ${hs.length} 筆／共 ${o.hist.length} 筆）</h3>${tbl(['銷帳年月','日期','姓名','實收','方式','經手人'],hs.map(p=>`<tr class="${p.k[0]=='L'?'loc':''}"><td>${esc(p.y)}/${esc(p.m)}</td><td>${esc(p.d)}</td><td>${esc(p.nm)}</td><td class="n">${fmt(p.amt||0)}</td><td>${esc(p.pay||'')}${p.bill?' #'+esc(p.bill):''}</td><td>${esc(p.who||'')}</td></tr>`))}${meterHistHtml(o.id)}`;
- openM(tabs+h);bindFam();$('#c-pay').onclick=()=>payForm(o);$('#c-ed').onclick=()=>editStall(o);}
+ openM(tabs+h);bindFam();$('#c-pay').onclick=()=>payForm(o);$('#c-ed').onclick=()=>editStall(o);if($('#c-ct'))$('#c-ct').onclick=()=>{const ct=stCt(o);go('ct');};}
 function bindFam(){$$('#mbody [data-fam]').forEach(b=>b.onclick=()=>card(b.dataset.fam));}
 function openM(h){$('#mbody').innerHTML=h;$('#modal').hidden=false;}
 $('#mx').onclick=()=>$('#modal').hidden=true;$('#modal').onclick=e=>{if(e.target.id=='modal')$('#modal').hidden=true;};
@@ -158,20 +163,22 @@ const V=id=>{const e=$('#'+id);return e?e.value.trim():'';};
 let stQ='';
 let stOff=false;
 const stSel=new Set(),rsSel=new Set();
-const stF={zero:false,bal:false,tmp:false,empty:false,pre:''};
+const stF={zero:false,bal:false,tmp:false,empty:false,noc:false,pre:''};
 const preOf=id=>{id=String(id);const m=/^(\d停|庫A|新庫|庫|臨時|十甲|東光|員|[A-Z]+)/i.exec(id);return m?U(m[1]):'其他';};
-function stMatch(o){if(stQ&&!U(o.id+o.name+o.tel).includes(U(stQ)))return false;if(stF.zero&&o.due)return false;if(stF.bal&&!(o.bal>0))return false;if(stF.tmp&&!/^臨時/.test(o.id))return false;if(stF.empty&&o.name)return false;if(stF.pre&&preOf(o.id)!=stF.pre)return false;return true;}
-function stall(){if(stOff)return stallOff();const vis=R.filter(stMatch);for(const k of [...stSel])if(!R.some(o=>U(o.id)==k))stSel.delete(k);const rows=vis.map(o=>`<tr class="click" data-id="${esc(o.id)}"><td class="ck"><input type="checkbox" class="stck" data-ck="${esc(o.id)}"${stSel.has(U(o.id))?' checked':''}></td><td>${esc(o.id)}</td><td>${esc(o.name)}</td><td>${esc(o.tel)}</td><td class="n">${num(o.rent.mon)}</td><td class="n">${num(o.rent.ice)}</td><td class="n">${num(o.rent.park)}</td><td class="n">${num(o.rent.clean)}</td><td class="n">${num(o.rent.day)}</td><td class="n">${num(o.elec)}</td><td class="n">${num(o.water)}</td><td class="n">${fmt(o.due)}</td><td class="n">${fmt(o.paid)}</td><td class="n">${fmt(o.bal)}</td><td style="white-space:nowrap"><button class="sm ghost" data-ed="${esc(o.id)}">編輯</button> <button class="sm ghost" data-rm="${esc(o.id)}" title="攤位已經沒有了：從這個月起不再出帳">移除</button></td></tr>`);
+function stCt(o){const m=window.SJFContract&&SJFContract.byStall(L)[U(o.id)]||[];const act=m.filter(c=>SJFContract.statusOf(c)!='expired'&&SJFContract.statusOf(c)!='none');return {all:m,act,st:SJFContract?SJFContract.bestStatus(act.length?act:m):'none'};}
+function stMatch(o){if(stQ&&!U(o.id+o.name+o.tel).includes(U(stQ)))return false;if(stF.zero&&o.due)return false;if(stF.bal&&!(o.bal>0))return false;if(stF.tmp&&!/^臨時/.test(o.id))return false;if(stF.empty&&o.name)return false;if(stF.noc){const c=stCt(o);if(c.st!=='none'&&c.st!=='expired')return false;}if(stF.pre&&preOf(o.id)!=stF.pre)return false;return true;}
+function stall(){if(stOff)return stallOff();const vis=R.filter(stMatch);for(const k of [...stSel])if(!R.some(o=>U(o.id)==k))stSel.delete(k);const rows=vis.map(o=>{const ct=stCt(o),lab=SJFContract.SLBL[ct.st]||'未簽約',col=SJFContract.SCOL[ct.st]||'#8a8277';
+ return `<tr class="click" data-id="${esc(o.id)}"><td class="ck"><input type="checkbox" class="stck" data-ck="${esc(o.id)}"${stSel.has(U(o.id))?' checked':''}></td><td>${esc(o.id)}</td><td>${esc(o.name)}</td><td>${esc(o.tel)}</td><td><span class="ct-badge" style="background:${col}">${lab}</span></td><td class="n">${num(o.rent.mon)}</td><td class="n">${num(o.rent.ice)}</td><td class="n">${num(o.rent.park)}</td><td class="n">${num(o.rent.clean)}</td><td class="n">${num(o.rent.day)}</td><td class="n">${num(o.elec)}</td><td class="n">${num(o.water)}</td><td class="n">${fmt(o.due)}</td><td class="n">${fmt(o.paid)}</td><td class="n">${fmt(o.bal)}</td><td style="white-space:nowrap"><button class="sm ghost" data-ed="${esc(o.id)}">編輯</button> <button class="sm ghost" data-rm="${esc(o.id)}" title="攤位已經沒有了：從這個月起不再出帳">移除</button></td></tr>`;});
  $('#p-stall').innerHTML=`<div class="card"><div class="row"><input id="stq" placeholder="搜尋攤號／姓名／電話" value="${esc(stQ)}"><button id="stnew">＋ 新增攤位</button><button class="ghost" id="stcsv">匯出 CSV</button><button class="ghost" id="stoff">🗃️ 已移除攤位（${offList().length}）</button><button class="ghost" id="stbadd">📥 大量新增／更新</button><button class="danger" id="stbulk"${stSel.size?'':' disabled'}>移除勾選的攤位（${stSel.size}）</button><span class="muted">${rows.length} 攤・${ymTxt()}</span></div>
- <div class="row stf"><b>篩選：</b><label><input type="checkbox" data-sf="zero"${stF.zero?' checked':''}> 本月應收為 0</label><label><input type="checkbox" data-sf="bal"${stF.bal?' checked':''}> 有欠款</label><label><input type="checkbox" data-sf="tmp"${stF.tmp?' checked':''}> 臨時攤位</label><label><input type="checkbox" data-sf="empty"${stF.empty?' checked':''}> 空攤（沒租客）</label>
- <select id="stpre" style="width:auto"><option value="">全部區域／開頭</option>${[...new Set(R.map(o=>preOf(o.id)))].sort().map(p=>`<option ${p==stF.pre?'selected':''}>${esc(p)}</option>`).join('')}</select>${stQ||stF.zero||stF.bal||stF.tmp||stF.empty||stF.pre?'<button class="sm ghost" id="stfclr">清除篩選</button>':''}<span class="muted" style="font-size:12px">表頭的全選框＝勾選目前篩選出來的全部攤位</span></div>
- ${tbl(['<input type="checkbox" id="stall" title="全選（目前篩選）"'+(vis.length&&vis.every(o=>stSel.has(U(o.id)))?' checked':'')+'>','攤位','租客','電話','月租','冰庫','停車','清潔','日租','電費','水費','應收','已收','餘款',''],rows)}</div><p class="muted" style="font-size:12px">租金照原表：取「攤位更新」中該攤年月範圍最大的一筆（不限 ≤ 本月）。編輯租金會新增一筆攤位更新紀錄。</p>`;
+ <div class="row stf"><b>篩選：</b><label><input type="checkbox" data-sf="zero"${stF.zero?' checked':''}> 本月應收為 0</label><label><input type="checkbox" data-sf="bal"${stF.bal?' checked':''}> 有欠款</label><label><input type="checkbox" data-sf="tmp"${stF.tmp?' checked':''}> 臨時攤位</label><label><input type="checkbox" data-sf="empty"${stF.empty?' checked':''}> 空攤（沒租客）</label><label><input type="checkbox" data-sf="noc"${stF.noc?' checked':''}> 未簽約／已到期</label>
+ <select id="stpre" style="width:auto"><option value="">全部區域／開頭</option>${[...new Set(R.map(o=>preOf(o.id)))].sort().map(p=>`<option ${p==stF.pre?'selected':''}>${esc(p)}</option>`).join('')}</select>${stQ||stF.zero||stF.bal||stF.tmp||stF.empty||stF.noc||stF.pre?'<button class="sm ghost" id="stfclr">清除篩選</button>':''}<span class="muted" style="font-size:12px">表頭的全選框＝勾選目前篩選出來的全部攤位</span></div>
+ ${tbl(['<input type="checkbox" id="stall" title="全選（目前篩選）"'+(vis.length&&vis.every(o=>stSel.has(U(o.id)))?' checked':'')+'>','攤位','租客','電話','合約','月租','冰庫','停車','清潔','日租','電費','水費','應收','已收','餘款',''],rows)}</div><p class="muted" style="font-size:12px">租金照原表：取「攤位更新」中該攤年月範圍最大的一筆（不限 ≤ 本月）。編輯租金會新增一筆攤位更新紀錄。合約狀態來自「線上合約書」。</p>`;
  SJFLiveQ($('#stq'),v=>{stQ=v;stall();});
  $('#stnew').onclick=()=>editStall(null,'');$('#stcsv').onclick=()=>csv('攤位建檔_'+Y+'_'+M,stallSheet());$$('#p-stall [data-ed]').forEach(b=>b.onclick=e=>{e.stopPropagation();editStall(byId[U(b.dataset.ed)]);});$$('#p-stall [data-rm]').forEach(b=>b.onclick=e=>{e.stopPropagation();rmStall(b.dataset.rm);});$('#stoff').onclick=()=>{stOff=true;stall();};bindRows('#p-stall');
  $$('#p-stall .ck').forEach(td=>td.onclick=e=>e.stopPropagation());$$('#p-stall [data-ck]').forEach(c=>c.onchange=()=>{const k=U(c.dataset.ck);c.checked?stSel.add(k):stSel.delete(k);stUpd();});
  $('#stall').onclick=e=>e.stopPropagation();$('#stall').onchange=e=>{vis.forEach(o=>e.target.checked?stSel.add(U(o.id)):stSel.delete(U(o.id)));$$('#p-stall [data-ck]').forEach(c=>c.checked=stSel.has(U(c.dataset.ck)));stUpd();};const stUpd=()=>{const b=$('#stbulk');b.textContent='移除勾選的攤位（'+stSel.size+'）';b.disabled=!stSel.size;$('#stall').checked=vis.length>0&&vis.every(o=>stSel.has(U(o.id)));};$('#stbulk').onclick=bulkRm;
  $$('#p-stall [data-sf]').forEach(c=>c.onchange=()=>{stF[c.dataset.sf]=c.checked;stall();});$('#stpre').onchange=e=>{stF.pre=e.target.value;stall();};
- if($('#stfclr'))$('#stfclr').onclick=()=>{stQ='';Object.assign(stF,{zero:false,bal:false,tmp:false,empty:false,pre:''});stall();};$('#stbadd').onclick=bulkStallForm;}
+ if($('#stfclr'))$('#stfclr').onclick=()=>{stQ='';Object.assign(stF,{zero:false,bal:false,tmp:false,empty:false,noc:false,pre:''});stall();};$('#stbadd').onclick=bulkStallForm;}
 // ── 大量新增／更新攤位
 const BK=window.SJFBulk;
 function rentOf(id){const o=byId[U(id)];if(o)return o.rent;let r=null;const ymk=Y*100+M;D.rents.forEach(x=>{if(U(x[1])==U(id)&&x[0]<=ymk&&(!r||x[0]>r.ym))r={ym:x[0],type:x[3],day:x[4],mon:x[5],ice:x[6],park:x[7],clean:x[8]};});return r||{};}
@@ -366,7 +373,7 @@ function data(){const n=cnt();
  <p class="muted" style="font-size:12px">每台裝置都要貼一次同一個網址。資料先在瀏覽器用登入密碼加密才上傳，試算表裡只看得到亂碼。沒網路時照常使用，連上網後會自動同步；同一筆在兩台都改過時，以<b>最後修改</b>的為準。設定方法見《設定說明》。</p></div>
  <div class="card" style="margin-top:12px"><h3 style="margin-top:0">本機異動備份（${n} 筆）</h3><div class="row"><button id="b-exp">匯出備份檔 (.json)</button><label class="ghost" style="border:1px solid var(--line);padding:9px 14px;border-radius:10px;cursor:pointer">匯入備份檔<input type="file" id="b-imp" accept=".json" hidden></label><button class="red" id="b-clr">清除這台裝置的本機異動</button></div>
  <p class="muted" style="font-size:12px">新增／修改只存在這台裝置的瀏覽器（localStorage，已用登入密碼加密）。要換裝置或備份，請匯出備份檔，到另一台登入後匯入。匯入會<b>取代</b>目前裝置上的本機異動。備份檔本身未加密，含個資，請勿外流。</p>
- ${tbl(['類別','筆數'],[['繳費新增',(L.pay||[]).length],['繳費隱藏',(L.payDel||[]).length],['水電讀數',(L.meter||[]).length],['流水帳新增',(L.jr||[]).length],['流水帳隱藏',(L.jrDel||[]).length],['攤位修改',Object.keys(L.stall||{}).length],['攤位新增',(L.stallNew||[]).length],['租金變更',(L.rent||[]).length]].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`))}</div>`;
+ ${tbl(['類別','筆數'],[['繳費新增',(L.pay||[]).length],['繳費隱藏',(L.payDel||[]).length],['水電讀數',(L.meter||[]).length],['流水帳新增',(L.jr||[]).length],['流水帳隱藏',(L.jrDel||[]).length],['攤位修改',Object.keys(L.stall||{}).length],['攤位新增',(L.stallNew||[]).length],['租金變更',(L.rent||[]).length],['合約書',Object.keys(L.ct||{}).filter(k=>!(L.ct[k]&&L.ct[k].del)).length]].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`))}</div>`;
  $('#x-xls').onclick=xls;$('#x-st').onclick=()=>csv('攤位建檔_'+Y+'_'+M,stallSheet());$('#x-py').onclick=()=>csv('繳費登記',paySheet(D.pays));$('#x-mt').onclick=()=>csv('水電錶登記',meterSheet());$('#x-jr').onclick=()=>csv('日帳流水帳',jrSheet(MarketCalc.journal(D)));
  $('#b-exp').onclick=()=>dl('十甲發_本機異動備份_'+new Date().toISOString().slice(0,10)+'.json',new Blob([JSON.stringify({app:'sjf',v:2,at:new Date().toISOString(),L},null,1)],{type:'application/json'}));
  $('#b-imp').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const o=JSON.parse(await f.text());if(o.app!='sjf'||!o.L)throw 0;if(!confirm('匯入會取代這台裝置目前的本機異動，確定？'))return;L=o.L;await saveLocal();toast('已匯入');}catch(x){alert('不是有效的備份檔');}};
