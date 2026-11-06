@@ -26,6 +26,17 @@ function isSummer(mm){return mm>=6&&mm<=9;}
 function seasonRate(s,y,m,mm){if(!s||!(+s.eS||+s.eW))return null;if(s.eFrom&&y*100+m<+s.eFrom)return null;const v=isSummer(mm)?+s.eS:+s.eW;return v>0?v:null;}
 // 電費每月折扣：攤位 eDisc 元／月，eDiscFrom＝自帳單年月(yyyMM)起；電費不到折扣額就全額折抵（不會變負數）
 function eDisc(s,y,m,elec){if(!s||!(+s.eDisc>0))return 0;if(s.eDiscFrom&&y*100+m<+s.eDiscFrom)return 0;return Math.max(0,Math.min(+s.eDisc,elec));}
+// 用電不另計費（臨時租等）：保留度數，電費應收＝0；eFreeFrom＝自帳單年月起
+function isEFree(s,y,m){if(!s||!+s.eFree)return false;if(s.eFreeFrom&&y*100+m<+s.eFreeFrom)return false;return true;}
+// 固定加收水費：wExtra 元，wExtraFrom／wExtraTo＝帳單年月起迄；wExtraFreq：'m'＝每月，'h'＝每年 4、10 月（與預設水錶抄表月一致）
+const WXFQ={m:'每月',h:'每年 4、10 月'},WXFQM={m:null,h:[4,10]};
+function wExtra(s,y,m){if(!s||!(+s.wExtra>0))return 0;const ymk=y*100+m;if(s.wExtraFrom&&ymk<+s.wExtraFrom)return 0;if(s.wExtraTo&&ymk>+s.wExtraTo)return 0;
+  const fq=s.wExtraFreq||'m',months=WXFQM[fq];if(months&&!months.includes(+m))return 0;return +s.wExtra;}
+function isTmp(s){return !!(s&&(+s.tmp||/^臨時/.test(String(s.id||''))));}
+function ruleLabels(s){const a=[];if(!s)return a;if(isTmp(s))a.push('臨時租');if(+s.eFree)a.push('用電不另計費');
+  if(+s.eDisc)a.push('電費折 '+(+s.eDisc)+'/月');if(+s.eS||+s.eW)a.push('季節電價');
+  if(+s.wExtra)a.push('加收水費 '+(+s.wExtra)+'（'+(WXFQ[s.wExtraFreq||'m']||s.wExtraFreq)+'）');
+  if(s.wq&&s.wq!='h')a.push(WQN[s.wq]||('水錶 '+s.wq));if(s.ph)a.push('電錶要拍照');return a;}
 // 抄表排程：電錶每月 28 號全部抄；水錶 wq：'h'＝每年 4、10 月（預設），'q'＝每季 1、4、7、10 月，'m'＝每月
 const WQ={h:[4,10],q:[1,4,7,10],m:[1,2,3,4,5,6,7,8,9,10,11,12]},WQN={h:'半年（4、10 月）',q:'每季（1、4、7、10 月）',m:'每月'};
 function waterDue(s,mm){return (WQ[(s&&s.wq)||'h']||WQ.h).includes(+mm);}
@@ -38,10 +49,11 @@ function compute(D,y,m){y=y||D.ym[0];m=m||D.ym[1];
   return D.stalls.filter(s=>!isOff(s,y,m)).map(s=>{const id=U(s.id),r=RT[id]||{day:0,mon:0,ice:0,park:0,clean:0},a=A[id]||Z,b=Bm[id]||Z;
     const e1=delta(a[0],b[0]),e2=delta(a[2],b[2]),w1=delta(a[4],b[4]),w2=delta(a[6],b[6]),R={e1:b[1],e2:b[3],w1:b[5],w2:b[7]};const sr=seasonRate(s,y,m,mm);if(sr!=null){if(e1||b[1])R.e1=sr;if(e2||b[3])R.e2=sr;}
     const o={st:s,id:s.id,name:s.name,tel:s.tel,note:s.note,rent:r,read:{e1:[a[0],b[0],e1],e2:[a[2],b[2],e2],w1:[a[4],b[4],w1],w2:[a[6],b[6],w2]},rate:R,
-      elecGross:xround(R.e1*e1+R.e2*e2),sr:sr,water:xround(R.w1*w1+R.w2*w2),hist:hist[id]||[],mY:[my,mm],pY:[py,pm]};
-    o.eDisc=eDisc(s,y,m,o.elecGross);o.elec=o.elecGross-o.eDisc;o.paid=paid[id+'|'+U(s.name)]||0;
+      elecGross:xround(R.e1*e1+R.e2*e2),sr:sr,waterGross:xround(R.w1*w1+R.w2*w2),hist:hist[id]||[],mY:[my,mm],pY:[py,pm],tmp:isTmp(s),rules:ruleLabels(s)};
+    o.eDisc=eDisc(s,y,m,o.elecGross);o.eFree=isEFree(s,y,m)?1:0;o.elec=o.eFree?0:o.elecGross-o.eDisc;
+    o.wExtra=wExtra(s,y,m);o.water=o.waterGross+o.wExtra;o.paid=paid[id+'|'+U(s.name)]||0;
     if(!s.name){o.due=null;o.bal=null;o.ar=false;return o;}
-    o.due=xround(r.mon+r.ice+r.park+r.clean+R.e1*e1+R.e2*e2+R.w1*w1+R.w2*w2+r.day)-o.eDisc;o.bal=o.due-o.paid;o.ar=o.due!==0;return o;});}
+    o.due=xround(r.mon+r.ice+r.park+r.clean+r.day)+o.elec+o.water;o.bal=o.due-o.paid;o.ar=o.due!==0;return o;});}
 // 日帳流水帳：D 損益項目、I 年月、K 金額計算
 function journal(D){const cat=D.lk.cat||{};return D.jr.map(j=>{const pl=j.j==='1'?'收入':j.j==='2'?'支出':(cat[j.cat]||'');const ds=String(j.date||'');
   return Object.assign({},j,{pl:pl,ym:ds?ds.slice(0,4)+'年'+ds.slice(4,6)+'月':'',signed:/支出$/.test(pl)?-(+j.amt||0):(+j.amt||0)});});}
@@ -79,5 +91,5 @@ function meterHist(D,id,yms){const k=U(id);yms=yms||allYM(D);const by={},cnt={};
       if(md>0&&o.use>3*md&&o.use-md>=20&&!r.flags.some(f=>(f[0]=='倒退'||f[0]=='跳表')&&f[1].startsWith(nm)))r.flags.push(['暴增',nm+' 用量 '+o.use+' 度，是中位數 '+md+' 的 '+(o.use/md).toFixed(1)+' 倍']);
       const isW=key[0]=='w';if(o.use===0&&o.cur>0&&us.length&&us.filter(x=>x>0).length>=us.length/2&&billed(r.ym)){z++;if(!isW||z==3)r.flags.push(['零用量',nm+(isW?' 連續 3 個月':'')+' 用量 0 但本攤有計租']);}else z=0;});});
   return {rows,meters:used.map(m=>m[0]),names:used.map(m=>m[1])};}
-g.MarketCalc={isOff,eDisc,waterDue,WQ,WQN,isSummer,seasonRate,compute,merge,journal,pnl,xround,delta,prevYM,meterHist,allYM};
+g.MarketCalc={isOff,eDisc,isEFree,wExtra,isTmp,ruleLabels,WXFQ,waterDue,WQ,WQN,isSummer,seasonRate,compute,merge,journal,pnl,xround,delta,prevYM,meterHist,allYM};
 })(typeof window!=='undefined'?window:globalThis);
