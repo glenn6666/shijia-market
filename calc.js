@@ -47,14 +47,16 @@ function isOff(s,y,m){return !!(s&&s.off&&+s.off<=y*100+m);}
 function compute(D,y,m){y=y||D.ym[0];m=m||D.ym[1];
   const [my,mm]=prevYM(y,m),[py,pm]=prevYM(my,mm);// 水電本月=帳單上月，水電上月=帳單上上月；費率取水電本月
   const A=meterMap(D,py,pm),Bm=meterMap(D,my,mm),RT=periodRents(D,y*100+m),Z=[0,0,0,0,0,0,0,0];
-  const paid={},hist={},pk=y+'|'+m;
-  D.pays.forEach(p=>{const st=U(p.st);(hist[st]=hist[st]||[]).push(p);if(String(p.y)+'|'+String(p.m)===pk){const k=st+'|'+U(p.nm);paid[k]=(paid[k]||0)+(+p.amt||0);}});
-  return D.stalls.filter(s=>!isOff(s,y,m)).map(s=>{const id=U(s.id),r=RT[id]||{day:0,mon:0,ice:0,park:0,clean:0},a=A[id]||Z,b=Bm[id]||Z;
+  const paid={},paidId={},hist={},pk=y+'|'+m;
+  D.pays.forEach(p=>{const st=U(p.st);(hist[st]=hist[st]||[]).push(p);if(String(p.y)+'|'+String(p.m)===pk){const k=st+'|'+U(p.nm),a=+p.amt||0;paid[k]=(paid[k]||0)+a;paidId[st]=(paidId[st]||0)+a;}});
+  // 臨時攤位＝每月重複使用的格子：租客名稱取「該帳單年月的租金紀錄」，已收＝該格當月所有繳費（不比對名稱，名稱每月不同）
+  return D.stalls.filter(s=>!isOff(s,y,m)).map(s=>{const id=U(s.id),r=RT[id]||{day:0,mon:0,ice:0,park:0,clean:0},a=A[id]||Z,b=Bm[id]||Z,tp=isTmp(s);
+    const s0=s;if(tp&&RT[id])s=Object.assign({},s,{name:RT[id].name||''});
     const e1=delta(a[0],b[0]),e2=delta(a[2],b[2]),w1=delta(a[4],b[4]),w2=delta(a[6],b[6]),R={e1:b[1],e2:b[3],w1:b[5],w2:b[7]};const sr=seasonRate(s,y,m,mm);if(sr!=null){if(e1||b[1])R.e1=sr;if(e2||b[3])R.e2=sr;}
-    const o={st:s,id:s.id,name:s.name,tel:s.tel,note:s.note,rent:r,read:{e1:[a[0],b[0],e1],e2:[a[2],b[2],e2],w1:[a[4],b[4],w1],w2:[a[6],b[6],w2]},rate:R,
-      elecGross:xround(R.e1*e1+R.e2*e2),sr:sr,waterGross:xround(R.w1*w1+R.w2*w2),hist:hist[id]||[],mY:[my,mm],pY:[py,pm],tmp:isTmp(s),rules:ruleLabels(s)};
+    const o={st:s0,id:s.id,name:s.name,tel:s.tel,note:s.note,rent:r,read:{e1:[a[0],b[0],e1],e2:[a[2],b[2],e2],w1:[a[4],b[4],w1],w2:[a[6],b[6],w2]},rate:R,
+      elecGross:xround(R.e1*e1+R.e2*e2),sr:sr,waterGross:xround(R.w1*w1+R.w2*w2),hist:hist[id]||[],mY:[my,mm],pY:[py,pm],tmp:tp,rules:ruleLabels(s)};
     o.eDisc=eDisc(s,y,m,o.elecGross);o.eFree=isEFree(s,y,m)?1:0;o.elec=o.eFree?0:o.elecGross-o.eDisc;
-    o.wExtra=wExtra(s,y,m);o.wFree=isWFree(s,y,m)?1:0;o.water=o.wFree?0:o.waterGross+o.wExtra;o.paid=paid[id+'|'+U(s.name)]||0;
+    o.wExtra=wExtra(s,y,m);o.wFree=isWFree(s,y,m)?1:0;o.water=o.wFree?0:o.waterGross+o.wExtra;o.paid=tp?(paidId[id]||0):(paid[id+'|'+U(s.name)]||0);
     if(!s.name){o.due=null;o.bal=null;o.ar=false;return o;}
     o.due=xround(r.mon+r.ice+r.park+r.clean+r.day)+o.elec+o.water;o.bal=o.due-o.paid;o.ar=o.due!==0;return o;});}
 // 日帳流水帳：D 損益項目、I 年月、K 金額計算
