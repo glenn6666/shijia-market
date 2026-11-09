@@ -19,18 +19,18 @@ function values(D,o,Y,M,fmt){const id=U(o.id),[my,mm]=prevYM(Y,M),[py,pm]=prevYM
   const e1=delta(a[0],b[0]),e2=delta(a[2],b[2]),w1=delta(a[4],b[4]),w2=delta(a[6],b[6]);
   const r=o.rent||{},has=r.ym!=null&&r.ym<=Y*100+M,paid=paidNoDep(D,id,Y,M);
   let elec=o.sr!=null?(e1+e2)*o.sr:e1*a[1]+e2*a[3];let water=w2*a[7]+w1*a[5];
-  // 電費每月折扣／用電不另計費；固定加收水費（calc.js eDisc / isEFree / wExtra）
+  // 電費每月折扣／用電不另計費；用水不另計費；固定加收水費（calc.js eDisc / isEFree / isWFree / wExtra）
   const MC=g.MarketCalc,ed=(o.st&&MC)?MC.eDisc(o.st,Y,M,xr(elec)):0;const eFree=!!(o.st&&MC&&MC.isEFree(o.st,Y,M));
   if(ed)elec=xr(elec)-ed;elec=eFree?0:xr(elec);
-  const wx=(o.st&&MC)?MC.wExtra(o.st,Y,M):0;const waterUse=xr(water);water=waterUse+wx;
+  const wx=(o.st&&MC)?MC.wExtra(o.st,Y,M):0;const wFree=!!(o.st&&MC&&MC.isWFree(o.st,Y,M));const waterUse=xr(water);water=wFree?0:waterUse+wx;
   if(fmt=='tri'){const rent=has?(r.type=='月租'?+r.mon||0:+r.day||0):0;const v={D5:has?r.name:0,H5:o.id,B6:M,E6:rent,I6:a[0],I7:b[0],I8:e1,B9:M,E9:has?+r.clean||0:0,I9:a[2],I10:b[2],I12:e2,
       B13:mm,E13:elec,I13:a[4],I14:b[4],I15:w1,B16:mm,E16:water,I16:a[6],I17:b[6],I18:w2,B19:M,E19:has?+r.ice||0:0,I20:paid,B21:M,E21:has?+r.park||0:0};
-    v.D25=v.E6+v.E9+elec+water+v.E19+v.E21-paid;if(eFree)v.E13='0(不計)';else if(ed)v.E13=elec+'(折'+ed+')';if(wx)v.E16=water+'(含加'+wx+')';return v;}
+    v.D25=v.E6+v.E9+elec+water+v.E19+v.E21-paid;if(eFree)v.E13='0(不計)';else if(ed)v.E13=elec+'(折'+ed+')';if(wFree)v.E16='0(不計)';else if(wx)v.E16=water+'(含加'+wx+')';return v;}
   const mon=has?+r.mon||0:0,cl=has?+r.clean||0:0,ice=has?+r.ice||0:0,pk=has?+r.park||0:0,other=0,prevOwe=0;// 待繳應付登記在原表全是文字，SUMIFS 恆為 0
   const due=xr(mon+cl+elec+water+ice+pk+other);const eg=eFree?0:elec+ed;const v={};
-  // A4：電費格印折前（有折扣時），折扣列「電費折扣」；用電不計則電費 0；固定加水費併入水費格
+  // A4：電費格印折前（有折扣時），折扣列「電費折扣」；用電／用水不計則對應格 0；固定加水費併入水費格
   [0,20,40].forEach(k=>{const A=(c,r)=>c+(r+k);
-    Object.assign(v,{[A('B',4)]:`${Y}年${M}月繳費單`,[A('D',5)]:o.name||'',[A('G',5)]:o.id,[A('D',6)]:mon,[A('D',7)]:cl,[A('D',9)]:eFree?0:(ed?eg:elec),[A('D',10)]:water,[A('D',11)]:w1*a[5],
+    Object.assign(v,{[A('B',4)]:`${Y}年${M}月繳費單`,[A('D',5)]:o.name||'',[A('G',5)]:o.id,[A('D',6)]:mon,[A('D',7)]:cl,[A('D',9)]:eFree?0:(ed?eg:elec),[A('D',10)]:water,[A('D',11)]:wFree?0:w1*a[5],
     [A('D',12)]:ice,[A('D',13)]:pk,[A('D',15)]:ed&&!eFree?-ed:other,...(ed&&!eFree?{[A('B',15)]:'電費折扣'}:{}),[A('H',6)]:a[0],[A('H',7)]:b[0],[A('H',8)]:e1,[A('H',9)]:a[2],[A('H',10)]:b[2],[A('H',11)]:e2,[A('H',12)]:a[4],[A('H',13)]:b[4],[A('H',14)]:w1,
     [A('H',15)]:a[6],[A('H',16)]:b[6],[A('H',17)]:w2,[A('H',18)]:prevOwe,[A('H',19)]:due,[A('H',20)]:paid,[A('H',21)]:prevOwe+due-paid});});
   return v;}
